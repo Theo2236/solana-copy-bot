@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/poll",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-wallets",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
