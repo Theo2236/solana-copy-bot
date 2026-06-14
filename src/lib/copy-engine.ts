@@ -64,10 +64,12 @@ async function handleCopyBuy(
     return;
   }
 
-  const balance = await getBotBalanceSol();
-  if (balance < config.tradeSizeSol + 0.01) {
-    await logSkip(swap, "Onvoldoende SOL saldo");
-    return;
+  if (!isDryRun()) {
+    const balance = await getBotBalanceSol();
+    if (balance < config.tradeSizeSol + 0.01) {
+      await logSkip(swap, "Onvoldoende SOL saldo");
+      return;
+    }
   }
 
   const position: Position = {

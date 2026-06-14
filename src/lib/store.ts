@@ -29,6 +29,21 @@ function getRedis(): Redis | null {
   return new Redis({ url, token });
 }
 
+/** Upstash deserializes JSON automatically — values may already be objects. */
+function parseStoredJson<T>(raw: unknown): T {
+  if (typeof raw === "string") {
+    return JSON.parse(raw) as T;
+  }
+  return raw as T;
+}
+
+function storedScalarToString(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  return JSON.stringify(raw);
+}
+
 function memoryStore(): Map<string, string> {
   const g = globalThis as typeof globalThis & {
     __copyBotMemory?: Map<string, string>;
@@ -42,8 +57,8 @@ function memoryStore(): Map<string, string> {
 async function kvGet(key: string): Promise<string | null> {
   const redis = getRedis();
   if (redis) {
-    const value = await redis.get<string>(key);
-    return value ?? null;
+    const value = await redis.get(key);
+    return storedScalarToString(value);
   }
   return memoryStore().get(key) ?? null;
 }
@@ -70,10 +85,10 @@ async function kvLpush(key: string, value: string, max = 200): Promise<void> {
   memoryStore().set(key, JSON.stringify(list.slice(0, max)));
 }
 
-async function kvLrange(key: string, start: number, end: number): Promise<string[]> {
+async function kvLrange(key: string, start: number, end: number): Promise<unknown[]> {
   const redis = getRedis();
   if (redis) {
-    const items = await redis.lrange<string>(key, start, end);
+    const items = await redis.lrange(key, start, end);
     return items ?? [];
   }
   const raw = memoryStore().get(key);
@@ -98,11 +113,17 @@ export async function addEvent(event: TradeEvent): Promise<void> {
 
 export async function getRecentEvents(limit = 50): Promise<TradeEvent[]> {
   const items = await kvLrange(KEYS.events, 0, limit - 1);
-  return items.map((item) => JSON.parse(item) as TradeEvent);
+  return items.map((item) => parseStoredJson<TradeEvent>(item));
 }
 
 export async function getPositions(): Promise<Position[]> {
-  const raw = await kvGet(KEYS.positions);
+  const redis = getRedis();
+  if (redis) {
+    const raw = await redis.get(KEYS.positions);
+    if (!raw) return [];
+    return parseStoredJson<Position[]>(raw);
+  }
+  const raw = memoryStore().get(KEYS.positions);
   if (!raw) return [];
   return JSON.parse(raw) as Position[];
 }
@@ -123,10 +144,20 @@ export async function upsertPosition(position: Position): Promise<void> {
 }
 
 export async function getTargets(): Promise<TargetWallet[]> {
-  const raw = await kvGet(KEYS.targets);
+  const redis = getRedis();
+  if (redis) {
+    const raw = await redis.get(KEYS.targets);
+    if (raw === null || raw === undefined) {
+      const defaults = getBotConfig().targets;
+      await redis.set(KEYS.targets, defaults);
+      return defaults;
+    }
+    return parseStoredJson<TargetWallet[]>(raw);
+  }
+  const raw = memoryStore().get(KEYS.targets);
   if (!raw) {
     const defaults = getBotConfig().targets;
-    await kvSet(KEYS.targets, JSON.stringify(defaults));
+    memoryStore().set(KEYS.targets, JSON.stringify(defaults));
     return defaults;
   }
   return JSON.parse(raw) as TargetWallet[];

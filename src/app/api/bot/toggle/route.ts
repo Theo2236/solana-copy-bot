@@ -8,7 +8,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { enabled?: boolean };
+  let body: { enabled?: boolean } = {};
+  try {
+    body = (await request.json()) as { enabled?: boolean };
+  } catch {
+    body = {};
+  }
   const current = await getBotEnabledState();
   const next = body.enabled ?? !current;
 

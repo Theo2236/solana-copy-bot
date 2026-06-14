@@ -1,5 +1,6 @@
 import { isAuthorizedDashboard } from "@/lib/auth";
 import { getBotConfig } from "@/lib/config";
+import { getSolPriceEur } from "@/lib/price";
 import {
   getPositions,
   getRecentEvents,
@@ -16,8 +17,12 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const balanceSol = await getBotBalanceSol();
+  const [balanceSol, solPriceEur] = await Promise.all([
+    getBotBalanceSol(),
+    getSolPriceEur(),
+  ]);
   const stats = await getStats(balanceSol);
+  stats.solPriceEur = solPriceEur;
   const config = getBotConfig();
 
   const data: DashboardData & { botWallet?: string | null } = {

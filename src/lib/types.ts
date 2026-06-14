@@ -75,6 +75,7 @@ export interface BotStats {
   botEnabled: boolean;
   mode: "live" | "dry_run";
   uptimeSince?: string;
+  solPriceEur?: number | null;
 }
 
 export interface DashboardData {

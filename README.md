@@ -6,7 +6,7 @@
 
 - Volgt 4 vooraf geselecteerde winning wallets (Jijo, Sheep, Kadenox, The Doc)
 - Ontvangt swaps via **Helius webhooks** (real-time)
-- Backup polling elke 5 minuten via **Vercel Cron**
+- Backup polling via **Vercel Cron** (1× per dag op Hobby plan)
 - Kopieert buys/sells via **Jupiter API**
 - Slaat trades, posities en events op in **Upstash Redis**
 - Monitoring via ingebouwde **webapp dashboard**
@@ -42,6 +42,7 @@ Kopieer `.env.example` naar `.env.local` en vul in:
 | `UPSTASH_REDIS_REST_URL` | Ja (prod) | Persistente state |
 | `UPSTASH_REDIS_REST_TOKEN` | Ja (prod) | Redis token |
 | `CRON_SECRET` | Ja (prod) | Beveiligt cron endpoints |
+| `DASHBOARD_PASSWORD` | Aanbevolen | Dashboard login |
 | `BOT_WALLET_PRIVATE_KEY` | Live only | Bot wallet voor swaps |
 | `BOT_MODE` | Nee | `dry_run` (default) of `live` |
 
@@ -115,6 +116,6 @@ Of koppel de GitHub repo in het Vercel dashboard.
 - Start altijd in `dry_run` modus
 - Phantom MCP werkt **niet** op Vercel — de bot gebruikt Jupiter + eigen wallet
 
-## Licentie
+Zie ook [docs/HANDOFF.md](docs/HANDOFF.md) voor overzetten naar een andere PC.
 
 MIT
