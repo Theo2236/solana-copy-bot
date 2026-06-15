@@ -34,9 +34,20 @@ export const DEFAULT_TARGETS = [
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
 export const WRAPPED_SOL_MINT = SOL_MINT;
 
+function copySizeModeFromEnv(): BotConfig["copySizeMode"] {
+  const raw = process.env.COPY_SIZE_MODE?.trim().toLowerCase();
+  return raw === "fixed" ? "fixed" : "conviction";
+}
+
 export function getBotConfig(): BotConfig {
+  const tradeSizeSol = Number(process.env.TRADE_SIZE_SOL ?? "0.05");
+
   return {
-    tradeSizeSol: Number(process.env.TRADE_SIZE_SOL ?? "0.05"),
+    tradeSizeSol,
+    copySizeMode: copySizeModeFromEnv(),
+    referenceConvictionPct: Number(process.env.COPY_REFERENCE_CONVICTION_PCT ?? "0.1"),
+    minCopyTradeSol: Number(process.env.MIN_COPY_TRADE_SOL ?? "0.01"),
+    maxCopyTradeSol: Number(process.env.MAX_COPY_TRADE_SOL ?? String(tradeSizeSol * 5)),
     maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS ?? "3"),
     maxTradesPerDay: Number(process.env.MAX_TRADES_PER_DAY ?? "5"),
     stopLossPct: Number(process.env.STOP_LOSS_PCT ?? "30"),

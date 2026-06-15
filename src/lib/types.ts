@@ -15,8 +15,15 @@ export interface TargetWallet {
   enabled: boolean;
 }
 
+export type CopySizeMode = "fixed" | "conviction";
+
 export interface BotConfig {
   tradeSizeSol: number;
+  copySizeMode: CopySizeMode;
+  /** Bij conviction: tradeSizeSol hoort bij deze % wallet-inzet van de target (bv. 0.1 = 10%). */
+  referenceConvictionPct: number;
+  minCopyTradeSol: number;
+  maxCopyTradeSol: number;
   maxOpenPositions: number;
   maxTradesPerDay: number;
   stopLossPct: number;
@@ -78,19 +85,65 @@ export interface BotStats {
   solPriceEur?: number | null;
 }
 
+export type DashboardConfig = Omit<BotConfig, "targets">;
+
+/** Afgeleide statistieken, berekend uit bestaande posities + events. */
+export interface DerivedStats {
+  winRate: number | null;
+  closedTrades: number;
+  avgPnlSol: number | null;
+  bestTradeSol: number | null;
+  worstTradeSol: number | null;
+  pnlTodaySol: number;
+  pnlWeekSol: number;
+  openExposureSol: number;
+  exposurePct: number | null;
+  skipCount24h: number;
+  errorCount24h: number;
+  copyCount24h: number;
+}
+
+/** Aggregatie van bot-kopieën per bron-wallet. */
+export interface TargetPerformance {
+  address: string;
+  label: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  openTrades: number;
+  realizedPnlSol: number;
+  lastActivityAt?: string;
+}
+
+/** Eén dag in de PnL-tijdlijn (gesloten posities). */
+export interface PnlPoint {
+  date: string;
+  pnlSol: number;
+  trades: number;
+}
+
+export interface HealthStatus {
+  redisConfigured: boolean;
+  heliusConfigured: boolean;
+  botWalletConfigured: boolean;
+  webhookSecretConfigured: boolean;
+  mode: "live" | "dry_run";
+  lastEventAt?: string;
+  minutesSinceLastEvent: number | null;
+  silenceWarning: boolean;
+}
+
 export interface DashboardData {
   stats: BotStats;
   positions: Position[];
   recentEvents: TradeEvent[];
   targets: TargetWallet[];
-  config: Pick<
-    BotConfig,
-    | "tradeSizeSol"
-    | "maxOpenPositions"
-    | "maxTradesPerDay"
-    | "stopLossPct"
-    | "takeProfitPct"
-  >;
+  config: DashboardConfig;
+  derivedStats: DerivedStats;
+  targetPerformance: TargetPerformance[];
+  pnlTimeline: PnlPoint[];
+  health: HealthStatus;
+  botWallet?: string | null;
 }
 
 export interface ParsedSwap {

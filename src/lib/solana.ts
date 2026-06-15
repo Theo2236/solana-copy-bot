@@ -48,6 +48,15 @@ export async function getBotBalanceSol(): Promise<number> {
   return lamports / LAMPORTS_PER_SOL;
 }
 
+export async function getWalletBalanceSol(address: string): Promise<number> {
+  try {
+    const lamports = await getConnection().getBalance(new PublicKey(address));
+    return lamports / LAMPORTS_PER_SOL;
+  } catch {
+    return 0;
+  }
+}
+
 export async function sendVersionedTransaction(
   serializedTx: string,
 ): Promise<string> {

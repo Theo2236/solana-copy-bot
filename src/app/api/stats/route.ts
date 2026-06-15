@@ -1,5 +1,11 @@
 import { isAuthorizedDashboard } from "@/lib/auth";
 import { getBotConfig } from "@/lib/config";
+import {
+  computeDerivedStats,
+  computePnlTimeline,
+  computeTargetPerformance,
+} from "@/lib/derived-stats";
+import { computeHealth } from "@/lib/health";
 import { getSolPriceEur } from "@/lib/price";
 import {
   getPositions,
@@ -25,18 +31,29 @@ export async function GET(request: Request) {
   stats.solPriceEur = solPriceEur;
   const config = getBotConfig();
 
-  const data: DashboardData & { botWallet?: string | null } = {
+  const [positions, recentEvents, targets] = await Promise.all([
+    getPositions(),
+    getRecentEvents(100),
+    getTargets(),
+  ]);
+
+  const { targets: _omitTargets, ...dashboardConfig } = config;
+
+  const data: DashboardData = {
     stats,
-    positions: await getPositions(),
-    recentEvents: await getRecentEvents(100),
-    targets: await getTargets(),
-    config: {
-      tradeSizeSol: config.tradeSizeSol,
-      maxOpenPositions: config.maxOpenPositions,
-      maxTradesPerDay: config.maxTradesPerDay,
-      stopLossPct: config.stopLossPct,
-      takeProfitPct: config.takeProfitPct,
-    },
+    positions,
+    recentEvents,
+    targets,
+    config: dashboardConfig,
+    derivedStats: computeDerivedStats(
+      positions,
+      recentEvents,
+      stats,
+      balanceSol,
+    ),
+    targetPerformance: computeTargetPerformance(positions, targets),
+    pnlTimeline: computePnlTimeline(positions),
+    health: computeHealth(stats.lastEventAt),
     botWallet: getBotPublicKey(),
   };
 

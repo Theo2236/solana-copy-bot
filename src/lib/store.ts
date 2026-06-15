@@ -22,6 +22,9 @@ const KEYS = {
   botEnabled: "bot:enabled",
 } as const;
 
+/** Verwerkte signatures vervallen na 7 dagen — voorkomt onbeperkte groei. */
+const SIGNATURE_TTL_SECONDS = 60 * 60 * 24 * 7;
+
 function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -52,6 +55,16 @@ function memoryStore(): Map<string, string> {
     g.__copyBotMemory = new Map();
   }
   return g.__copyBotMemory;
+}
+
+function signatureMemory(): Set<string> {
+  const g = globalThis as typeof globalThis & {
+    __copyBotSignatures?: Set<string>;
+  };
+  if (!g.__copyBotSignatures) {
+    g.__copyBotSignatures = new Set();
+  }
+  return g.__copyBotSignatures;
 }
 
 async function kvGet(key: string): Promise<string | null> {
@@ -165,6 +178,41 @@ export async function getTargets(): Promise<TargetWallet[]> {
 
 export async function saveTargets(targets: TargetWallet[]): Promise<void> {
   await kvSet(KEYS.targets, JSON.stringify(targets));
+}
+
+export async function setTargetEnabled(
+  address: string,
+  enabled: boolean,
+): Promise<TargetWallet[]> {
+  const targets = await getTargets();
+  const next = targets.map((target) =>
+    target.address === address ? { ...target, enabled } : target,
+  );
+  await saveTargets(next);
+  return next;
+}
+
+/**
+ * Markeert een signature als verwerkt. Geeft `true` terug als de signature
+ * nieuw is (mag verwerkt worden) en `false` bij een duplicaat. Voorkomt dat
+ * cron + webhook dezelfde swap dubbel kopiëren.
+ */
+export async function markSignatureProcessed(
+  signature: string,
+): Promise<boolean> {
+  if (!signature) return true;
+  const redis = getRedis();
+  if (redis) {
+    const result = await redis.set(`bot:sig:${signature}`, "1", {
+      nx: true,
+      ex: SIGNATURE_TTL_SECONDS,
+    });
+    return result === "OK";
+  }
+  const seen = signatureMemory();
+  if (seen.has(signature)) return false;
+  seen.add(signature);
+  return true;
 }
 
 export async function getTradesToday(): Promise<number> {
