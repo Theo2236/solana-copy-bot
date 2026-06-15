@@ -111,8 +111,11 @@ export function getBotConfig(): BotConfig {
     stopLossPct: Number(process.env.STOP_LOSS_PCT ?? "30"),
     takeProfitPct: Number(process.env.TAKE_PROFIT_PCT ?? "100"),
     maxDrawdownEur: Number(process.env.MAX_DRAWDOWN_EUR ?? "20"),
-    minLiquidityUsd: Number(process.env.MIN_LIQUIDITY_USD ?? "50000"),
-    minTokenAgeHours: Number(process.env.MIN_TOKEN_AGE_HOURS ?? "1"),
+    // Laag gehouden zodat verse pump.fun-memecoins (waar de target-wallets de
+    // meeste winst maken) niet worden weggefilterd. De price-impact-guard op de
+    // quote beschermt tegen écht illiquide tokens.
+    minLiquidityUsd: Number(process.env.MIN_LIQUIDITY_USD ?? "2000"),
+    minTokenAgeHours: Number(process.env.MIN_TOKEN_AGE_HOURS ?? "0"),
     slippageBps: Number(process.env.SLIPPAGE_BPS ?? "300"),
     targets: DEFAULT_TARGETS.map((t) => ({ ...t })),
   };

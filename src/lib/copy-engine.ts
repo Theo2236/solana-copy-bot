@@ -190,7 +190,11 @@ async function handleCopyBuy(
   // op de quote vangt extreem illiquide tokens alsnog af.
   const market = await getTokenMarketData(swap.mint);
   if (market !== null) {
-    if (market.liquidityUsd < config.minLiquidityUsd) {
+    // Verse pump.fun-tokens rapporteren vaak $0 omdat Dexscreener ze nog niet
+    // (volledig) heeft geïndexeerd. Dat behandelen we als 'onbekend' en laten we
+    // door — de price-impact-guard op de quote houdt écht illiquide tokens tegen.
+    // Alleen bij een bekende, te lage liquiditeit (> $0) skippen we.
+    if (market.liquidityUsd > 0 && market.liquidityUsd < config.minLiquidityUsd) {
       await logSkip(
         swap,
         `Liquiditeit te laag ($${Math.round(market.liquidityUsd).toLocaleString("nl-NL")} < $${config.minLiquidityUsd.toLocaleString("nl-NL")})`,
