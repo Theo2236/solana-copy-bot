@@ -14,6 +14,7 @@ interface HeaderActionsProps {
   onWebhook: () => void;
   onRefresh: () => void;
   onLogout: () => void;
+  refreshing?: boolean;
 }
 
 export function HeaderActions({
@@ -26,6 +27,7 @@ export function HeaderActions({
   onWebhook,
   onRefresh,
   onLogout,
+  refreshing = false,
 }: HeaderActionsProps) {
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur">
@@ -58,10 +60,10 @@ export function HeaderActions({
           <div className="flex flex-wrap gap-2">
             <button
               onClick={onRefresh}
-              disabled={actionLoading}
+              disabled={actionLoading || refreshing}
               className="rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50"
             >
-              Refresh
+              {refreshing ? "Bezig…" : "Refresh"}
             </button>
             <button
               onClick={onToggle}

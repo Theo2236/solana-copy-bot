@@ -1,7 +1,6 @@
 import { isAuthorizedCron } from "@/lib/auth";
-import { checkOpenPositions, processSwap } from "@/lib/copy-engine";
-import { fetchRecentSwapsForWallet } from "@/lib/helius";
-import { addEvent, createEventId, getTargets } from "@/lib/store";
+import { runTargetPoll } from "@/lib/poll";
+import { addEvent, createEventId } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,21 +10,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const targets = await getTargets().then((items) =>
-    items.filter((t) => t.enabled),
-  );
-
-  let processed = 0;
-
-  for (const target of targets) {
-    const swaps = await fetchRecentSwapsForWallet(target.address, 3);
-    for (const swap of swaps) {
-      await processSwap(swap);
-      processed += 1;
-    }
-  }
-
-  await checkOpenPositions();
+  const { processed, targets } = await runTargetPoll(3);
 
   await addEvent({
     id: createEventId(),
@@ -34,5 +19,5 @@ export async function GET(request: Request) {
     message: `Cron poll afgerond (${processed} swaps gecontroleerd)`,
   });
 
-  return Response.json({ ok: true, processed, targets: targets.length });
+  return Response.json({ ok: true, processed, targets });
 }

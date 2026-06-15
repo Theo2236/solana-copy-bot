@@ -17,6 +17,7 @@ import { getBotBalanceSol, getBotPublicKey } from "@/lib/solana";
 import type { DashboardData } from "@/lib/types";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   if (!isAuthorizedDashboard(request)) {
@@ -57,5 +58,9 @@ export async function GET(request: Request) {
     botWallet: getBotPublicKey(),
   };
 
-  return Response.json(data);
+  return Response.json(data, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
+  });
 }

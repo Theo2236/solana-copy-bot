@@ -38,10 +38,11 @@ export function Dashboard() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busyTarget, setBusyTarget] = useState<string | null>(null);
   const [addBusy, setAddBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch("/api/stats", {
+      const response = await fetch(`/api/stats?_=${Date.now()}`, {
         cache: "no-store",
         ...dashboardFetchInit(),
       });
@@ -65,6 +66,50 @@ export function Dashboard() {
       setLoading(false);
     }
   }, []);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      const pollResponse = await fetch(
+        "/api/poll",
+        dashboardFetchInit({ method: "POST" }),
+      );
+      if (pollResponse.status === 401) {
+        clearStoredDashboardPassword();
+        setAuthenticated(false);
+        throw new Error("Onjuist wachtwoord");
+      }
+
+      let pollMessage: string | null = null;
+      if (pollResponse.ok) {
+        const pollJson = (await pollResponse.json()) as {
+          processed?: number;
+          targets?: number;
+        };
+        pollMessage = `${pollJson.processed ?? 0} swaps gecontroleerd (${pollJson.targets ?? 0} wallets)`;
+      } else {
+        const pollJson = (await pollResponse.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        pollMessage = pollJson.error ?? "Poll mislukt";
+      }
+
+      await fetchStats();
+
+      if (pollResponse.ok) {
+        setFeedback({ tone: "ok", message: `Ververs: ${pollMessage}` });
+      } else {
+        setFeedback({ tone: "error", message: pollMessage ?? "Poll mislukt" });
+      }
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Verversen mislukt",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     if (getStoredDashboardPassword()) {
@@ -365,7 +410,8 @@ export function Dashboard() {
         feedback={feedback}
         onToggle={toggleBot}
         onWebhook={setupWebhook}
-        onRefresh={fetchStats}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
         onLogout={handleLogout}
       />
       <TabNav active={tab} onChange={setTab} />
