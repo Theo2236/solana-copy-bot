@@ -192,6 +192,30 @@ export async function setTargetEnabled(
   return next;
 }
 
+/** Voegt een nieuwe target-wallet toe (of werkt een bestaande bij). */
+export async function addTarget(
+  target: TargetWallet,
+): Promise<{ targets: TargetWallet[]; added: boolean }> {
+  const targets = await getTargets();
+  const index = targets.findIndex((t) => t.address === target.address);
+  if (index >= 0) {
+    targets[index] = { ...targets[index], ...target };
+    await saveTargets(targets);
+    return { targets, added: false };
+  }
+  const next = [...targets, target];
+  await saveTargets(next);
+  return { targets: next, added: true };
+}
+
+/** Verwijdert een target-wallet op adres. */
+export async function removeTarget(address: string): Promise<TargetWallet[]> {
+  const targets = await getTargets();
+  const next = targets.filter((t) => t.address !== address);
+  await saveTargets(next);
+  return next;
+}
+
 /**
  * Markeert een signature als verwerkt. Geeft `true` terug als de signature
  * nieuw is (mag verwerkt worden) en `false` bij een duplicaat. Voorkomt dat

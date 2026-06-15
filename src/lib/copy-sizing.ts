@@ -19,7 +19,13 @@ export async function computeCopyTradeSize(
   swap: ParsedSwap,
   config: BotConfig,
 ): Promise<CopyTradeSizeResult> {
-  if (config.copySizeMode !== "conviction" || swap.side !== "buy") {
+  // Conviction-sizing werkt alleen voor SOL-gefunde buys. Bij stablecoin-gefunde
+  // trades (solAmount = 0) kennen we de SOL-inzet niet, dus vaste grootte.
+  if (
+    config.copySizeMode !== "conviction" ||
+    swap.side !== "buy" ||
+    swap.solAmount <= 0
+  ) {
     return {
       tradeSol: config.tradeSizeSol,
       mode: "fixed",

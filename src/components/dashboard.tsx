@@ -37,6 +37,7 @@ export function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busyTarget, setBusyTarget] = useState<string | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -199,6 +200,61 @@ export function Dashboard() {
     }
   }
 
+  async function addTargetWallet(address: string, label: string) {
+    setAddBusy(true);
+    try {
+      const response = await fetch(
+        "/api/targets/add",
+        dashboardFetchInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address, label, requireActivity: false }),
+        }),
+      );
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json.error ?? "Wallet toevoegen mislukt");
+      }
+      const swaps = json.activity?.swapCount ?? 0;
+      setFeedback({
+        tone: "ok",
+        message: `Wallet toegevoegd (${swaps} recente swaps gevonden)`,
+      });
+      await fetchStats();
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Wallet toevoegen mislukt",
+      });
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
+  async function removeTargetWallet(address: string) {
+    setBusyTarget(address);
+    try {
+      const response = await fetch(
+        "/api/targets/remove",
+        dashboardFetchInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address }),
+        }),
+      );
+      if (!response.ok) throw new Error("Verwijderen mislukt");
+      setFeedback({ tone: "ok", message: "Wallet verwijderd" });
+      await fetchStats();
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Verwijderen mislukt",
+      });
+    } finally {
+      setBusyTarget(null);
+    }
+  }
+
   async function exportHistory() {
     try {
       const response = await fetch(
@@ -341,7 +397,10 @@ export function Dashboard() {
                 <TargetsTable
                   targets={targets}
                   onToggle={toggleTarget}
+                  onAdd={addTargetWallet}
+                  onRemove={removeTargetWallet}
                   busyAddress={busyTarget}
+                  addBusy={addBusy}
                 />
               </div>
             </section>

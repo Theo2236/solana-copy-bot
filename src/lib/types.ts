@@ -150,7 +150,12 @@ export interface ParsedSwap {
   wallet: string;
   side: TradeSide;
   mint: string;
+  /** Bedrag in SOL waarmee de target handelde (0 als met stablecoin gefund). */
   solAmount: number;
+  /** Bedrag in USD als de trade met een stablecoin (USDC/USDT) is gefund. */
+  usdAmount?: number;
+  /** Funding-valuta van de target-trade. */
+  quote?: "SOL" | "USD";
   signature: string;
   timestamp: number;
 }

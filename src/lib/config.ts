@@ -2,24 +2,38 @@ import type { BotConfig } from "./types";
 
 export const DEFAULT_TARGETS = [
   {
-    address: "4BdKaxN8G6ka4GYtQQWk4G4dZRUTX2vQH9GcXdBREFUk",
-    label: "Jijo",
-    pnl30dSol: 835,
-    winRate: 67,
+    address: "CyaE1VxvBrahnPWkqm5VsdCvyS2QmNht2UFrKJHga54o",
+    label: "Cented",
+    pnl30dSol: 4457,
+    winRate: 52,
     enabled: true,
   },
   {
-    address: "78N177fzNJpp8pG49xDv1efYcTMSzo9tPTKEA9mAVkh2",
-    label: "Sheep",
-    pnl30dSol: 628,
-    winRate: 58,
+    address: "Bi4rd5FH5bYEN8scZ7wevxNZyNmKHdaBcvewdPFxYdLt",
+    label: "Theo",
+    pnl30dSol: 3161,
+    winRate: 42,
+    enabled: true,
+  },
+  {
+    address: "4vw54BmAogeRV3vPKWyFet5yf8DTLcREzdSzx4rw9Ud9",
+    label: "Decu",
+    pnl30dSol: 1257,
+    winRate: 48,
+    enabled: true,
+  },
+  {
+    address: "2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f",
+    label: "Cupsey",
+    pnl30dSol: 369,
+    winRate: 42,
     enabled: true,
   },
   {
     address: "B32QbbdDAyhvUQzjcaM5j6ZVKwjCxAwGH5Xgvb9SJqnC",
     label: "Kadenox",
-    pnl30dSol: 413,
-    winRate: 58,
+    pnl30dSol: 435,
+    winRate: 52,
     enabled: true,
   },
   {
@@ -29,10 +43,54 @@ export const DEFAULT_TARGETS = [
     winRate: 48,
     enabled: true,
   },
+  {
+    address: "78N177fzNJpp8pG49xDv1efYcTMSzo9tPTKEA9mAVkh2",
+    label: "Sheep",
+    pnl30dSol: 380,
+    winRate: 50,
+    enabled: true,
+  },
 ] as const;
 
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
 export const WRAPPED_SOL_MINT = SOL_MINT;
+
+export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+export const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+
+/**
+ * Mints die we NIET als memecoin-trade behandelen: SOL (+ wrapped), stablecoins
+ * en de grote liquid-staking tokens. Een swap van SOL → USDC is geen copy-trade
+ * maar een trader die winst vastzet; die negeren we volledig.
+ */
+export const NON_MEMECOIN_MINTS = new Set<string>([
+  SOL_MINT,
+  USDC_MINT,
+  USDT_MINT,
+  "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX", // USDH
+  "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", // Wormhole USDC (USDCet)
+  "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
+  "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", // jitoSOL
+  "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1", // bSOL
+  "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", // stSOL
+]);
+
+/** True als de mint een echte (copyable) memecoin is, geen stablecoin/SOL. */
+export function isCopyableMint(mint: string): boolean {
+  return !NON_MEMECOIN_MINTS.has(mint);
+}
+
+/** Stablecoins die traders als funding-valuta gebruiken, met hun decimals. */
+export const STABLECOIN_DECIMALS: Record<string, number> = {
+  [USDC_MINT]: 6,
+  [USDT_MINT]: 6,
+  USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX: 6,
+  EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm: 6,
+};
+
+export function isStablecoinMint(mint: string): boolean {
+  return mint in STABLECOIN_DECIMALS;
+}
 
 function copySizeModeFromEnv(): BotConfig["copySizeMode"] {
   const raw = process.env.COPY_SIZE_MODE?.trim().toLowerCase();

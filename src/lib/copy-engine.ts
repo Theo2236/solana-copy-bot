@@ -1,5 +1,5 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getBotConfig, isDryRun, SOL_MINT } from "./config";
+import { getBotConfig, isCopyableMint, isDryRun, SOL_MINT } from "./config";
 import { computeCopyTradeSize, formatConvictionPct } from "./copy-sizing";
 import { buyTokenWithSol, getQuote, sellTokenForSol } from "./jupiter";
 import {
@@ -47,6 +47,13 @@ export async function processSwap(swap: ParsedSwap): Promise<void> {
 
   if (!enabled) {
     await logSkip(swap, "Bot staat uit");
+    return;
+  }
+
+  // Geen memecoin (SOL→USDC/USDT of liquid-staking) — nooit kopen. Een sell
+  // van zo'n mint laten we wel door zodat een eventuele oude positie kan sluiten.
+  if (swap.side === "buy" && !isCopyableMint(swap.mint)) {
+    await logSkip(swap, "Geen memecoin (stablecoin/SOL) — overgeslagen");
     return;
   }
 
