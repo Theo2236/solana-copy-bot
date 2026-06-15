@@ -20,6 +20,7 @@ const KEYS = {
   wins: "bot:wins",
   losses: "bot:losses",
   botEnabled: "bot:enabled",
+  targetHoldings: "bot:target_holdings",
 } as const;
 
 /** Verwerkte signatures vervallen na 7 dagen — voorkomt onbeperkte groei. */
@@ -214,6 +215,64 @@ export async function removeTarget(address: string): Promise<TargetWallet[]> {
   const next = targets.filter((t) => t.address !== address);
   await saveTargets(next);
   return next;
+}
+
+/**
+ * Geobserveerde tokenposities van de target-wallets (decimaal-gecorrigeerd).
+ * Sleutel: `wallet:mint`. Gebruikt om bij een sell de verkochte fractie van de
+ * target te spiegelen op onze eigen positie (gedeeltelijke verkopen).
+ */
+type HoldingsMap = Record<string, number>;
+
+async function getHoldingsMap(): Promise<HoldingsMap> {
+  const raw = await kvGet(KEYS.targetHoldings);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as HoldingsMap;
+  } catch {
+    return {};
+  }
+}
+
+function holdingKey(wallet: string, mint: string): string {
+  return `${wallet}:${mint}`;
+}
+
+export async function getTargetHolding(
+  wallet: string,
+  mint: string,
+): Promise<number> {
+  const map = await getHoldingsMap();
+  return map[holdingKey(wallet, mint)] ?? 0;
+}
+
+export async function addTargetHolding(
+  wallet: string,
+  mint: string,
+  amount: number,
+): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const map = await getHoldingsMap();
+  const key = holdingKey(wallet, mint);
+  map[key] = (map[key] ?? 0) + amount;
+  await kvSet(KEYS.targetHoldings, JSON.stringify(map));
+}
+
+export async function reduceTargetHolding(
+  wallet: string,
+  mint: string,
+  amount: number,
+): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const map = await getHoldingsMap();
+  const key = holdingKey(wallet, mint);
+  const next = (map[key] ?? 0) - amount;
+  if (next <= 0) {
+    delete map[key];
+  } else {
+    map[key] = next;
+  }
+  await kvSet(KEYS.targetHoldings, JSON.stringify(map));
 }
 
 /**

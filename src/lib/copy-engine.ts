@@ -4,15 +4,18 @@ import { computeCopyTradeSize, formatConvictionPct } from "./copy-sizing";
 import { buyTokenWithSol, getQuote, sellTokenForSol } from "./jupiter";
 import {
   addEvent,
+  addTargetHolding,
   createEventId,
   getBotEnabledState,
   getPositions,
   getStats,
+  getTargetHolding,
   getTargets,
   getTradesToday,
   incrementTradesToday,
   markSignatureProcessed,
   recordTradeResult,
+  reduceTargetHolding,
   upsertPosition,
 } from "./store";
 import type { ParsedSwap, Position } from "./types";
@@ -58,11 +61,87 @@ export async function processSwap(swap: ParsedSwap): Promise<void> {
   }
 
   if (swap.side === "buy") {
+    // Houd bij hoeveel van deze munt de target nu aanhoudt (voor sell-fractie).
+    if (swap.tokenAmount && swap.tokenAmount > 0) {
+      await addTargetHolding(swap.wallet, swap.mint, swap.tokenAmount);
+    }
     await handleCopyBuy(swap, config);
     return;
   }
 
-  await handleCopySell(swap);
+  const fraction = await computeSellFraction(swap);
+  await handleCopySell(swap, fraction);
+}
+
+/**
+ * Bepaalt welk deel van onze positie we verkopen op basis van hoeveel de target
+ * van zijn aangehouden hoeveelheid verkocht. Onbekend → 1 (volledige sell).
+ */
+async function computeSellFraction(swap: ParsedSwap): Promise<number> {
+  const amount = swap.tokenAmount;
+  if (!amount || amount <= 0) return 1;
+
+  const held = await getTargetHolding(swap.wallet, swap.mint);
+  await reduceTargetHolding(swap.wallet, swap.mint, amount);
+
+  if (held <= 0) return 1;
+  const fraction = amount / held;
+  if (!Number.isFinite(fraction) || fraction <= 0) return 1;
+  return Math.min(1, fraction);
+}
+
+/** Parse een raw integer-quantity string veilig naar BigInt. */
+function safeBigInt(value: string | undefined): bigint {
+  if (!value) return 0n;
+  try {
+    return BigInt(value.split(".")[0]);
+  } catch {
+    return 0n;
+  }
+}
+
+/**
+ * Voegt een buy samen met een eventuele bestaande open positie (averaging-in):
+ * sommeert quantity + entrySol en herberekent de gewogen gemiddelde entryprijs.
+ */
+function mergeBuy(
+  existing: Position | undefined,
+  swap: ParsedSwap,
+  tradeSol: number,
+  quantityRaw: string | undefined,
+): Position {
+  const now = new Date().toISOString();
+  const addQty = safeBigInt(quantityRaw);
+
+  if (existing) {
+    const totalQty = safeBigInt(existing.quantity) + addQty;
+    const newEntrySol = existing.entrySol + tradeSol;
+    const qtyStr =
+      existing.quantity || quantityRaw ? totalQty.toString() : undefined;
+    const qtyNum = Number(totalQty);
+    return {
+      ...existing,
+      entrySol: newEntrySol,
+      quantity: qtyStr,
+      entryPrice: qtyNum > 0 ? newEntrySol / qtyNum : existing.entryPrice,
+      buyCount: (existing.buyCount ?? 1) + 1,
+      lastBuyAt: now,
+    };
+  }
+
+  const qtyNum = Number(addQty);
+  return {
+    id: createEventId(),
+    mint: swap.mint,
+    entrySol: tradeSol,
+    entryPrice: qtyNum > 0 ? tradeSol / qtyNum : undefined,
+    quantity: quantityRaw,
+    openedAt: now,
+    sourceWallet: swap.wallet,
+    sourceTx: swap.signature,
+    status: "open",
+    buyCount: 1,
+  };
 }
 
 async function handleCopyBuy(
@@ -72,19 +151,17 @@ async function handleCopyBuy(
   const positions = await getPositions();
   const openPositions = positions.filter((p) => p.status === "open");
   const tradesToday = await getTradesToday();
-
-  if (openPositions.length >= config.maxOpenPositions) {
-    await logSkip(swap, "Max open posities bereikt");
-    return;
-  }
+  const existing = openPositions.find((p) => p.mint === swap.mint);
 
   if (tradesToday >= config.maxTradesPerDay) {
     await logSkip(swap, "Daglimiet trades bereikt");
     return;
   }
 
-  if (openPositions.some((p) => p.mint === swap.mint)) {
-    await logSkip(swap, "Positie voor mint bestaat al");
+  // Alleen een nieuwe mint telt mee voor max open posities; bijkopen op een
+  // bestaande positie (averaging-in) mag altijd.
+  if (!existing && openPositions.length >= config.maxOpenPositions) {
+    await logSkip(swap, "Max open posities bereikt");
     return;
   }
 
@@ -144,16 +221,6 @@ async function handleCopyBuy(
     }
   }
 
-  const position: Position = {
-    id: createEventId(),
-    mint: swap.mint,
-    entrySol: tradeSol,
-    openedAt: new Date().toISOString(),
-    sourceWallet: swap.wallet,
-    sourceTx: swap.signature,
-    status: "open",
-  };
-
   const sizingMeta =
     sizing.mode === "conviction" && sizing.convictionPct !== null
       ? {
@@ -170,6 +237,8 @@ async function handleCopyBuy(
       ? ` (target ${formatConvictionPct(sizing.convictionPct)} wallet)`
       : "";
 
+  const averagedIn = Boolean(existing);
+
   if (isDryRun()) {
     // Echte quote ophalen zodat de gesimuleerde positie een realistische
     // token-hoeveelheid krijgt; daarmee wordt de dry-run PnL marktgebaseerd.
@@ -180,6 +249,7 @@ async function handleCopyBuy(
       slippageBps: config.slippageBps,
     });
 
+    let quantityRaw: string | undefined;
     if (quote) {
       const impact = Number(quote.priceImpactPct) * 100;
       if (Number.isFinite(impact) && impact > MAX_BUY_PRICE_IMPACT_PCT) {
@@ -189,27 +259,27 @@ async function handleCopyBuy(
         );
         return;
       }
-      position.quantity = quote.outAmount;
-      const qty = Number(quote.outAmount);
-      if (qty > 0) {
-        position.entryPrice = tradeSol / qty;
-      }
+      quantityRaw = quote.outAmount;
     }
 
-    await upsertPosition(position);
+    const merged = mergeBuy(existing, swap, tradeSol, quantityRaw);
+    await upsertPosition(merged);
     await incrementTradesToday();
+    const verb = averagedIn ? `Bijgekocht (#${merged.buyCount})` : "Zou kopen";
     await addEvent({
       id: createEventId(),
       timestamp: new Date().toISOString(),
       type: "copy_buy",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `[DRY RUN] Zou ${tradeSol} SOL kopen op ${swap.mint}${convictionNote}`,
+      message: `[DRY RUN] ${verb} ${tradeSol} SOL op ${swap.mint}${convictionNote}`,
       txSignature: swap.signature,
       metadata: {
         mode: "dry_run",
-        quantity: position.quantity ?? null,
+        quantity: merged.quantity ?? null,
         tradeSol,
+        buyCount: merged.buyCount,
+        averagedIn,
         ...sizingMeta,
       },
     });
@@ -240,18 +310,19 @@ async function handleCopyBuy(
       slippageBps: config.slippageBps,
     });
 
-    position.quantity = result.quote.outAmount;
-    await upsertPosition(position);
+    const merged = mergeBuy(existing, swap, tradeSol, result.quote.outAmount);
+    await upsertPosition(merged);
     await incrementTradesToday();
+    const verb = averagedIn ? `Bijgekocht (#${merged.buyCount})` : "Gekocht";
     await addEvent({
       id: createEventId(),
       timestamp: new Date().toISOString(),
       type: "copy_buy",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `Gekocht: ${tradeSol} SOL → ${swap.mint}${convictionNote}`,
+      message: `${verb}: ${tradeSol} SOL → ${swap.mint}${convictionNote}`,
       txSignature: result.signature,
-      metadata: { tradeSol, ...sizingMeta },
+      metadata: { tradeSol, buyCount: merged.buyCount, averagedIn, ...sizingMeta },
     });
   } catch (error) {
     await addEvent({
@@ -266,7 +337,10 @@ async function handleCopyBuy(
   }
 }
 
-async function handleCopySell(swap: ParsedSwap): Promise<void> {
+async function handleCopySell(
+  swap: ParsedSwap,
+  fraction: number,
+): Promise<void> {
   const positions = await getPositions();
   const position = positions.find(
     (p) => p.mint === swap.mint && p.status === "open",
@@ -277,16 +351,47 @@ async function handleCopySell(swap: ParsedSwap): Promise<void> {
     return;
   }
 
+  const remaining = safeBigInt(position.quantity);
+  const sellFraction = Math.min(1, Math.max(0, fraction));
+  // Bepaal hoeveel we verkopen. Geen quantity bekend, fractie ~volledig, of
+  // de berekende portie wordt 0 → volledige sluiting.
+  const sellQty =
+    remaining > 0n
+      ? (remaining * BigInt(Math.round(sellFraction * 1_000_000))) / 1_000_000n
+      : 0n;
+  const sellAll =
+    sellFraction >= 0.999 || remaining <= 0n || sellQty <= 0n || sellQty >= remaining;
+
   if (isDryRun()) {
-    const exitSol = await quoteSellSol(position);
+    if (sellAll) {
+      const exitSol = await quoteSellSol(position);
+      const pnlSol =
+        exitSol !== null ? exitSol - position.entrySol : estimatePnl(position);
+      const marketBased = exitSol !== null;
+      await finalizeClose(position, "copy_sell", position.entrySol + pnlSol, pnlSol);
+      await recordTradeResult(pnlSol);
+      await addEvent({
+        id: createEventId(),
+        timestamp: new Date().toISOString(),
+        type: "copy_sell",
+        wallet: swap.wallet,
+        mint: swap.mint,
+        message: `[DRY RUN] Positie gesloten op copy-sell (PnL ${pnlSol.toFixed(4)} SOL${marketBased ? "" : ", schatting"})`,
+        txSignature: swap.signature,
+        metadata: { mode: "dry_run", marketBased },
+      });
+      return;
+    }
+
+    const exitPortion = await quoteSellSolForAmount(position.mint, sellQty);
+    const portionEntrySol =
+      position.entrySol * (Number(sellQty) / Number(remaining));
     const pnlSol =
-      exitSol !== null ? exitSol - position.entrySol : estimatePnl(position);
-    const marketBased = exitSol !== null;
-    position.status = "closed";
-    position.closedAt = new Date().toISOString();
-    position.closeReason = "copy_sell";
-    position.exitSol = position.entrySol + pnlSol;
-    position.pnlSol = pnlSol;
+      exitPortion !== null
+        ? exitPortion - portionEntrySol
+        : portionEntrySol * 0.05 * (Math.random() > 0.5 ? 1 : -1);
+
+    applyPartialSell(position, remaining - sellQty, portionEntrySol, pnlSol);
     await upsertPosition(position);
     await recordTradeResult(pnlSol);
     await addEvent({
@@ -295,9 +400,14 @@ async function handleCopySell(swap: ParsedSwap): Promise<void> {
       type: "copy_sell",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `[DRY RUN] Positie gesloten op copy-sell (PnL ${pnlSol.toFixed(4)} SOL${marketBased ? "" : ", schatting"})`,
+      message: `[DRY RUN] Deels verkocht (${(sellFraction * 100).toFixed(0)}%, #${position.sellCount}) — PnL ${pnlSol.toFixed(4)} SOL`,
       txSignature: swap.signature,
-      metadata: { mode: "dry_run", marketBased },
+      metadata: {
+        mode: "dry_run",
+        partial: true,
+        sellFraction,
+        sellCount: position.sellCount,
+      },
     });
     return;
   }
@@ -307,33 +417,48 @@ async function handleCopySell(swap: ParsedSwap): Promise<void> {
     return;
   }
 
+  const qtyToSell = sellAll ? remaining : sellQty;
+
   try {
     const result = await sellTokenForSol({
       mint: swap.mint,
-      tokenAmount: position.quantity,
+      tokenAmount: qtyToSell.toString(),
       slippageBps: getBotConfig().slippageBps,
     });
 
-    const exitSol =
-      Number(result.quote.outAmount) / LAMPORTS_PER_SOL;
-    const pnlSol = exitSol - position.entrySol;
+    const exitSol = Number(result.quote.outAmount) / LAMPORTS_PER_SOL;
 
-    position.status = "closed";
-    position.closedAt = new Date().toISOString();
-    position.closeReason = "copy_sell";
-    position.exitSol = exitSol;
-    position.pnlSol = pnlSol;
+    if (sellAll) {
+      const pnlSol = exitSol - position.entrySol;
+      await finalizeClose(position, "copy_sell", exitSol, pnlSol);
+      await recordTradeResult(pnlSol);
+      await addEvent({
+        id: createEventId(),
+        timestamp: new Date().toISOString(),
+        type: "copy_sell",
+        wallet: swap.wallet,
+        mint: swap.mint,
+        message: `Verkocht: ${swap.mint} (PnL ${pnlSol.toFixed(4)} SOL)`,
+        txSignature: result.signature,
+      });
+      return;
+    }
+
+    const portionEntrySol =
+      position.entrySol * (Number(qtyToSell) / Number(remaining));
+    const pnlSol = exitSol - portionEntrySol;
+    applyPartialSell(position, remaining - qtyToSell, portionEntrySol, pnlSol);
     await upsertPosition(position);
     await recordTradeResult(pnlSol);
-
     await addEvent({
       id: createEventId(),
       timestamp: new Date().toISOString(),
       type: "copy_sell",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `Verkocht: ${swap.mint} (PnL ${pnlSol.toFixed(4)} SOL)`,
+      message: `Deels verkocht (${(sellFraction * 100).toFixed(0)}%, #${position.sellCount}) — PnL ${pnlSol.toFixed(4)} SOL`,
       txSignature: result.signature,
+      metadata: { partial: true, sellFraction, sellCount: position.sellCount },
     });
   } catch (error) {
     await addEvent({
@@ -348,6 +473,36 @@ async function handleCopySell(swap: ParsedSwap): Promise<void> {
   }
 }
 
+/** Sluit een positie volledig en zet de slot-velden. */
+async function finalizeClose(
+  position: Position,
+  reason: NonNullable<Position["closeReason"]>,
+  exitSol: number,
+  pnlSol: number,
+): Promise<void> {
+  position.status = "closed";
+  position.closedAt = new Date().toISOString();
+  position.closeReason = reason;
+  position.exitSol = exitSol;
+  // Totaal-PnL = eerder gerealiseerde porties + deze laatste sluiting.
+  position.pnlSol = (position.realizedPnlSol ?? 0) + pnlSol;
+  await upsertPosition(position);
+}
+
+/** Verwerkt een gedeeltelijke verkoop: verlaagt quantity + entrySol (cost basis). */
+function applyPartialSell(
+  position: Position,
+  newRemaining: bigint,
+  portionEntrySol: number,
+  pnlSol: number,
+): void {
+  position.quantity = newRemaining.toString();
+  position.entrySol = Math.max(0, position.entrySol - portionEntrySol);
+  position.sellCount = (position.sellCount ?? 0) + 1;
+  position.realizedPnlSol = (position.realizedPnlSol ?? 0) + pnlSol;
+  position.lastSellAt = new Date().toISOString();
+}
+
 function estimatePnl(position: Position): number {
   return position.entrySol * 0.05 * (Math.random() > 0.5 ? 1 : -1);
 }
@@ -358,13 +513,22 @@ function estimatePnl(position: Position): number {
  */
 async function quoteSellSol(position: Position): Promise<number | null> {
   if (!position.quantity) return null;
-  const tokenAmount = Number(position.quantity);
-  if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) return null;
+  return quoteSellSolForAmount(position.mint, safeBigInt(position.quantity));
+}
+
+/** SOL-opbrengst van het verkopen van `tokenAmountRaw` base units van `mint`. */
+async function quoteSellSolForAmount(
+  mint: string,
+  tokenAmountRaw: bigint,
+): Promise<number | null> {
+  if (tokenAmountRaw <= 0n) return null;
+  const amount = Number(tokenAmountRaw);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
 
   const quote = await getQuote({
-    inputMint: position.mint,
+    inputMint: mint,
     outputMint: SOL_MINT,
-    amountLamports: Math.floor(tokenAmount),
+    amountLamports: Math.floor(amount),
     slippageBps: getBotConfig().slippageBps,
   });
   if (!quote) return null;
@@ -434,12 +598,7 @@ async function closePosition(
 
   if (isDryRun()) {
     const pnlSol = exitSolQuote - position.entrySol;
-    position.status = "closed";
-    position.closedAt = new Date().toISOString();
-    position.closeReason = reason;
-    position.exitSol = exitSolQuote;
-    position.pnlSol = pnlSol;
-    await upsertPosition(position);
+    await finalizeClose(position, reason, exitSolQuote, pnlSol);
     await recordTradeResult(pnlSol);
     await addEvent({
       id: createEventId(),
@@ -462,12 +621,7 @@ async function closePosition(
     });
     const exitSol = Number(result.quote.outAmount) / LAMPORTS_PER_SOL;
     const pnlSol = exitSol - position.entrySol;
-    position.status = "closed";
-    position.closedAt = new Date().toISOString();
-    position.closeReason = reason;
-    position.exitSol = exitSol;
-    position.pnlSol = pnlSol;
-    await upsertPosition(position);
+    await finalizeClose(position, reason, exitSol, pnlSol);
     await recordTradeResult(pnlSol);
     await addEvent({
       id: createEventId(),

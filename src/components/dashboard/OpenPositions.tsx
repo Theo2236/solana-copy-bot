@@ -49,8 +49,18 @@ export function OpenPositions({
             className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 text-sm"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="font-medium">
+              <span className="flex items-center gap-2 font-medium">
                 {position.symbol ?? "Token"}
+                {(position.buyCount ?? 1) > 1 && (
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                    {position.buyCount}× gekocht
+                  </span>
+                )}
+                {(position.sellCount ?? 0) > 0 && (
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+                    {position.sellCount}× deels verkocht
+                  </span>
+                )}
               </span>
               <ExplorerLink value={position.mint} kind="token" />
             </div>

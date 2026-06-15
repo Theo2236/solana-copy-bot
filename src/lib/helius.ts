@@ -58,6 +58,29 @@ function pickCopyableMint(
 
 type TokenEntry = { mint: string; rawTokenAmount?: { tokenAmount: string } };
 
+/**
+ * Decimaal-gecorrigeerde (absolute) tokenhoeveelheid die `wallet` voor `mint`
+ * verhandelde, afgeleid uit accountData.tokenBalanceChanges. Geeft `undefined`
+ * als die data ontbreekt. Consistent met de eenheid uit parseFromTransfers.
+ */
+function tokenAmountForMint(
+  payload: HeliusWebhookPayload,
+  wallet: string,
+  mint: string,
+): number | undefined {
+  const changes = payload.accountData?.flatMap((a) => a.tokenBalanceChanges ?? []);
+  if (!changes?.length) return undefined;
+  let total = 0;
+  for (const c of changes) {
+    if (c.mint !== mint) continue;
+    if (c.userAccount && c.userAccount !== wallet) continue;
+    const raw = Number(c.rawTokenAmount?.tokenAmount ?? "0");
+    const decimals = c.rawTokenAmount?.decimals ?? 0;
+    if (Number.isFinite(raw)) total += raw / 10 ** decimals;
+  }
+  return total !== 0 ? Math.abs(total) : undefined;
+}
+
 /** Vindt een stablecoin-entry en geeft het USD-bedrag terug (raw → decimals). */
 function stableUsdAmount(entries: TokenEntry[]): number | null {
   for (const entry of entries) {
@@ -107,7 +130,7 @@ export function parseHeliusSwap(
   if (solInput > 0 && outputs.length) {
     const mint = pickCopyableMint(outputs);
     if (mint) {
-      return { wallet, side: "buy", mint, solAmount: solInput, quote: "SOL", signature, timestamp };
+      return { wallet, side: "buy", mint, solAmount: solInput, quote: "SOL", tokenAmount: tokenAmountForMint(payload, wallet, mint), signature, timestamp };
     }
   }
 
@@ -115,7 +138,7 @@ export function parseHeliusSwap(
   if (solOutput > 0 && inputs.length) {
     const mint = pickCopyableMint(inputs);
     if (mint) {
-      return { wallet, side: "sell", mint, solAmount: solOutput, quote: "SOL", signature, timestamp };
+      return { wallet, side: "sell", mint, solAmount: solOutput, quote: "SOL", tokenAmount: tokenAmountForMint(payload, wallet, mint), signature, timestamp };
     }
   }
 
@@ -130,6 +153,7 @@ export function parseHeliusSwap(
       solAmount: 0,
       usdAmount: usd ?? undefined,
       quote: "USD",
+      tokenAmount: tokenAmountForMint(payload, wallet, memeOut),
       signature,
       timestamp,
     };
@@ -146,6 +170,7 @@ export function parseHeliusSwap(
       solAmount: 0,
       usdAmount: usd ?? undefined,
       quote: "USD",
+      tokenAmount: tokenAmountForMint(payload, wallet, memeIn),
       signature,
       timestamp,
     };
@@ -196,6 +221,7 @@ function parseFromTransfers(
   if (!mint || best === 0) return null;
 
   const side: ParsedSwap["side"] = best > 0 ? "buy" : "sell";
+  const tokenAmount = Math.abs(best);
   const signature = payload.signature ?? "unknown";
   const timestamp = payload.timestamp ?? Date.now();
 
@@ -212,6 +238,7 @@ function parseFromTransfers(
       mint,
       solAmount: nativeChangeLamports / 1_000_000_000,
       quote: "SOL",
+      tokenAmount,
       signature,
       timestamp,
     };
@@ -236,6 +263,7 @@ function parseFromTransfers(
     solAmount: 0,
     usdAmount: usd,
     quote: "USD",
+    tokenAmount,
     signature,
     timestamp,
   };
@@ -257,12 +285,14 @@ function inferSwapFromBalances(
 
   if (!tokenChange?.mint) return null;
 
+  const tokenAmount = tokenAmountForMint(payload, wallet, tokenChange.mint);
+
   // SOL-gefunde swap: richting bepalen via SOL-balansverandering.
   if (nativeChange < -0.001) {
-    return { wallet, side: "buy", mint: tokenChange.mint, solAmount: Math.abs(nativeChange), quote: "SOL", signature, timestamp };
+    return { wallet, side: "buy", mint: tokenChange.mint, solAmount: Math.abs(nativeChange), quote: "SOL", tokenAmount, signature, timestamp };
   }
   if (nativeChange > 0.001) {
-    return { wallet, side: "sell", mint: tokenChange.mint, solAmount: nativeChange, quote: "SOL", signature, timestamp };
+    return { wallet, side: "sell", mint: tokenChange.mint, solAmount: nativeChange, quote: "SOL", tokenAmount, signature, timestamp };
   }
 
   // Geen SOL-beweging → waarschijnlijk stablecoin-gefund. Richting bepalen via
@@ -278,10 +308,10 @@ function inferSwapFromBalances(
       : undefined;
 
   if (Number.isFinite(memeAmount) && memeAmount > 0) {
-    return { wallet, side: "buy", mint: tokenChange.mint, solAmount: 0, usdAmount: usd, quote: "USD", signature, timestamp };
+    return { wallet, side: "buy", mint: tokenChange.mint, solAmount: 0, usdAmount: usd, quote: "USD", tokenAmount, signature, timestamp };
   }
   if (Number.isFinite(memeAmount) && memeAmount < 0) {
-    return { wallet, side: "sell", mint: tokenChange.mint, solAmount: 0, usdAmount: usd, quote: "USD", signature, timestamp };
+    return { wallet, side: "sell", mint: tokenChange.mint, solAmount: 0, usdAmount: usd, quote: "USD", tokenAmount, signature, timestamp };
   }
 
   return null;

@@ -39,8 +39,11 @@ export interface Position {
   id: string;
   mint: string;
   symbol?: string;
+  /** Totaal geïnvesteerde SOL in de (nog open) positie — som van alle buys minus verkochte porties. */
   entrySol: number;
+  /** Gewogen gemiddelde entryprijs (SOL per token base-unit). */
   entryPrice?: number;
+  /** Resterende token-hoeveelheid (raw base units) na eventuele gedeeltelijke verkopen. */
   quantity?: string;
   openedAt: string;
   sourceWallet: string;
@@ -50,6 +53,14 @@ export interface Position {
   pnlSol?: number;
   closedAt?: string;
   closeReason?: "take_profit" | "stop_loss" | "copy_sell" | "manual";
+  /** Aantal keer bijgekocht (averaging-in). Start op 1. */
+  buyCount?: number;
+  /** Aantal gedeeltelijke verkopen. */
+  sellCount?: number;
+  /** Gerealiseerde PnL uit gedeeltelijke verkopen vóór volledige sluiting. */
+  realizedPnlSol?: number;
+  lastBuyAt?: string;
+  lastSellAt?: string;
 }
 
 export interface TradeEvent {
@@ -156,6 +167,8 @@ export interface ParsedSwap {
   usdAmount?: number;
   /** Funding-valuta van de target-trade. */
   quote?: "SOL" | "USD";
+  /** Hoeveelheid van de memecoin die de target verhandelde (decimaal-gecorrigeerd, absoluut). */
+  tokenAmount?: number;
   signature: string;
   timestamp: number;
 }
