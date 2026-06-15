@@ -270,13 +270,14 @@ async function handleCopyBuy(
     await upsertPosition(merged);
     await incrementTradesToday();
     const verb = averagedIn ? `Bijgekocht (#${merged.buyCount})` : "Zou kopen";
+    const quoteNote = quote ? "" : " (geen Jupiter-quote — geschatte positie)";
     await addEvent({
       id: createEventId(),
       timestamp: new Date().toISOString(),
       type: "copy_buy",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `[DRY RUN] ${verb} ${tradeSol} SOL op ${swap.mint}${convictionNote}`,
+      message: `[DRY RUN] ${verb} ${tradeSol} SOL op ${swap.mint}${convictionNote}${quoteNote}`,
       txSignature: swap.signature,
       metadata: {
         mode: "dry_run",
@@ -567,7 +568,7 @@ export async function checkOpenPositions(): Promise<void> {
         await closePosition(position, "stop_loss", exitSol, pnlPct);
         continue;
       }
-      if (pnlPct >= config.takeProfitPct) {
+      if (config.takeProfitPct > 0 && pnlPct >= config.takeProfitPct) {
         await closePosition(position, "take_profit", exitSol, pnlPct);
         continue;
       }
@@ -582,7 +583,10 @@ export async function checkOpenPositions(): Promise<void> {
         timestamp: new Date().toISOString(),
         type: "position_close",
         mint: position.mint,
-        message: `Positie ouder dan 24u — handmatige review aanbevolen (SL ${config.stopLossPct}% / TP ${config.takeProfitPct}%)`,
+        message:
+          config.takeProfitPct > 0
+            ? `Positie ouder dan 24u — handmatige review aanbevolen (SL ${config.stopLossPct}% / TP ${config.takeProfitPct}%)`
+            : `Positie ouder dan 24u — exit via target copy-sell (SL ${config.stopLossPct}%, geen take-profit)`,
       });
     }
   }

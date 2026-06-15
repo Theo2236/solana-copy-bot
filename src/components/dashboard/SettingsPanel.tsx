@@ -51,7 +51,13 @@ export function SettingsPanel({
     { label: "Max open posities", value: String(config.maxOpenPositions) },
     { label: "Max trades / dag", value: String(config.maxTradesPerDay) },
     { label: "Stop loss", value: `-${config.stopLossPct}%` },
-    { label: "Take profit", value: `+${config.takeProfitPct}%` },
+    {
+      label: "Take profit",
+      value:
+        config.takeProfitPct > 0
+          ? `+${config.takeProfitPct}%`
+          : "Uit (exit via copy-sell)",
+    },
     { label: "Max drawdown", value: `€${config.maxDrawdownEur}` },
     {
       label: "Min liquiditeit",

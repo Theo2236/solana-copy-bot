@@ -1,8 +1,10 @@
 import { SOL_MINT } from "./config";
 import { getBotPublicKey, sendVersionedTransaction } from "./solana";
 
-const JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote";
-const JUPITER_SWAP_URL = "https://quote-api.jup.ag/v6/swap";
+/** V6-host quote-api.jup.ag is uitgefaseerd; lite-api is het actieve endpoint. */
+const JUPITER_QUOTE_URL = "https://lite-api.jup.ag/swap/v1/quote";
+const JUPITER_SWAP_URL = "https://lite-api.jup.ag/swap/v1/swap";
+const FETCH_TIMEOUT_MS = 12_000;
 
 export interface JupiterQuote {
   inputMint: string;
@@ -10,6 +12,19 @@ export interface JupiterQuote {
   inAmount: string;
   outAmount: string;
   priceImpactPct: string;
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function getQuote(params: {
@@ -24,13 +39,18 @@ export async function getQuote(params: {
   url.searchParams.set("amount", String(params.amountLamports));
   url.searchParams.set("slippageBps", String(params.slippageBps));
 
-  const response = await fetch(url, { next: { revalidate: 0 } });
-  if (!response.ok) {
-    console.error("Jupiter quote failed", await response.text());
+  try {
+    const response = await fetchWithTimeout(url, { next: { revalidate: 0 } });
+    if (!response.ok) {
+      console.error("Jupiter quote failed", await response.text());
+      return null;
+    }
+
+    return (await response.json()) as JupiterQuote;
+  } catch (error) {
+    console.error("Jupiter quote fetch error", error);
     return null;
   }
-
-  return (await response.json()) as JupiterQuote;
 }
 
 export async function executeSwap(params: {
@@ -49,7 +69,7 @@ export async function executeSwap(params: {
     throw new Error("No Jupiter quote available");
   }
 
-  const swapResponse = await fetch(JUPITER_SWAP_URL, {
+  const swapResponse = await fetchWithTimeout(JUPITER_SWAP_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
