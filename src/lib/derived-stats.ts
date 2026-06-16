@@ -51,8 +51,10 @@ export function computeDerivedStats(
     if (!p.closedAt) continue;
     const t = new Date(p.closedAt).getTime();
     if (Number.isNaN(t)) continue;
-    if (t >= todayStart) pnlTodaySol += p.pnlSol as number;
-    if (t >= weekStart) pnlWeekSol += p.pnlSol as number;
+    const pnl = p.pnlSol as number;
+    if (!Number.isFinite(pnl)) continue;
+    if (t >= todayStart) pnlTodaySol += pnl;
+    if (t >= weekStart) pnlWeekSol += pnl;
   }
 
   let skipCount24h = 0;
@@ -66,7 +68,10 @@ export function computeDerivedStats(
     else if (e.type === "copy_buy" || e.type === "copy_sell") copyCount24h += 1;
   }
 
-  const openExposureSol = open.reduce((sum, p) => sum + (p.entrySol ?? 0), 0);
+  const openExposureSol = open.reduce(
+    (sum, p) => sum + (Number.isFinite(p.entrySol) ? p.entrySol : 0),
+    0,
+  );
 
   return {
     winRate: decided > 0 ? (stats.wins / decided) * 100 : null,

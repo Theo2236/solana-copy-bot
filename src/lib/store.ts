@@ -132,14 +132,56 @@ export async function getRecentEvents(limit = 50): Promise<TradeEvent[]> {
 
 export async function getPositions(): Promise<Position[]> {
   const redis = getRedis();
+  let rawPositions: Position[];
   if (redis) {
     const raw = await redis.get(KEYS.positions);
     if (!raw) return [];
-    return parseStoredJson<Position[]>(raw);
+    rawPositions = parseStoredJson<Position[]>(raw);
+  } else {
+    const raw = memoryStore().get(KEYS.positions);
+    if (!raw) return [];
+    rawPositions = JSON.parse(raw) as Position[];
   }
-  const raw = memoryStore().get(KEYS.positions);
-  if (!raw) return [];
-  return JSON.parse(raw) as Position[];
+
+  const { positions, changed } = sanitizePositions(rawPositions);
+  if (changed) {
+    await savePositions(positions);
+  }
+  return positions;
+}
+
+/** Verwijdert corrupte posities (NaN entrySol) zodat het dashboard niet crasht. */
+function sanitizePositions(positions: Position[]): {
+  positions: Position[];
+  changed: boolean;
+} {
+  const next: Position[] = [];
+  let changed = false;
+
+  for (const position of positions) {
+    const entryOk = Number.isFinite(position.entrySol) && position.entrySol >= 0;
+    if (!entryOk) {
+      changed = true;
+      continue;
+    }
+
+    const cleaned: Position = { ...position };
+    if (typeof cleaned.pnlSol === "number" && !Number.isFinite(cleaned.pnlSol)) {
+      delete cleaned.pnlSol;
+      changed = true;
+    }
+    if (
+      typeof cleaned.exitSol === "number" &&
+      !Number.isFinite(cleaned.exitSol)
+    ) {
+      delete cleaned.exitSol;
+      changed = true;
+    }
+    next.push(cleaned);
+  }
+
+  if (next.length !== positions.length) changed = true;
+  return { positions: next, changed };
 }
 
 export async function savePositions(positions: Position[]): Promise<void> {

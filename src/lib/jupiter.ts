@@ -71,16 +71,38 @@ async function fetchWithTimeout(
   }
 }
 
+/** Geldig geheel lamport-bedrag voor Jupiter (geen NaN/decimale strings). */
+export function toQuoteAmountLamports(value: number | bigint): number | null {
+  if (typeof value === "bigint") {
+    if (value <= 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    return Number(value);
+  }
+  if (!Number.isFinite(value) || value < 1) return null;
+  const floored = Math.floor(value);
+  return floored >= 1 ? floored : null;
+}
+
 export async function getJupiterQuote(params: {
   inputMint: string;
   outputMint: string;
   amountLamports: number;
   slippageBps: number;
 }): Promise<JupiterQuoteResult> {
+  const amount = toQuoteAmountLamports(params.amountLamports);
+  if (amount === null) {
+    return {
+      quote: null,
+      error: {
+        reason: "amount_too_small",
+        message: `Ongeldig swapbedrag (${params.amountLamports})`,
+      },
+    };
+  }
+
   const url = new URL(JUPITER_QUOTE_URL);
   url.searchParams.set("inputMint", params.inputMint);
   url.searchParams.set("outputMint", params.outputMint);
-  url.searchParams.set("amount", String(params.amountLamports));
+  url.searchParams.set("amount", String(amount));
   url.searchParams.set("slippageBps", String(params.slippageBps));
   // Aanbevolen door Jupiter: ruimte voor pump.fun / DLMM-routes.
   url.searchParams.set("maxAccounts", "64");

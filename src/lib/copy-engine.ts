@@ -212,6 +212,11 @@ async function handleCopyBuy(
   const sizing = await computeCopyTradeSize(swap, config);
   const tradeSol = sizing.tradeSol;
 
+  if (!Number.isFinite(tradeSol) || tradeSol <= 0) {
+    await logSkip(swap, "Ongeldige tradegrootte (config/sizing)");
+    return;
+  }
+
   if (!isDryRun()) {
     const balance = await getBotBalanceSol();
     if (balance < tradeSol + 0.01) {
@@ -540,13 +545,11 @@ async function quoteSellSolForAmount(
   tokenAmountRaw: bigint,
 ): Promise<number | null> {
   if (tokenAmountRaw <= 0n) return null;
-  const amount = Number(tokenAmountRaw);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
 
   const quoteResult = await getTradeQuote({
     inputMint: mint,
     outputMint: SOL_MINT,
-    amountLamports: Math.floor(amount),
+    amountLamports: tokenAmountRaw,
     slippageBps: getBotConfig().slippageBps,
   });
   if (!quoteResult.quote) return null;

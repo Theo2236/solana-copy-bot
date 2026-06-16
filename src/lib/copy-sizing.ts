@@ -74,7 +74,11 @@ export async function computeCopyTradeSize(
 }
 
 function clampTradeSol(amount: number, config: BotConfig): number {
-  const clamped = Math.min(config.maxCopyTradeSol, Math.max(config.minCopyTradeSol, amount));
+  const fallback = Number.isFinite(config.tradeSizeSol) ? config.tradeSizeSol : 0.05;
+  const base = Number.isFinite(amount) ? amount : fallback;
+  const min = Number.isFinite(config.minCopyTradeSol) ? config.minCopyTradeSol : 0.02;
+  const max = Number.isFinite(config.maxCopyTradeSol) ? config.maxCopyTradeSol : fallback * 5;
+  const clamped = Math.min(max, Math.max(min, base));
   return Math.round(clamped * 1_000_000) / 1_000_000;
 }
 

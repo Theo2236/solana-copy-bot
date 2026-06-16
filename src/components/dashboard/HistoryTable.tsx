@@ -6,6 +6,7 @@ import {
   CLOSE_REASON_LABELS,
   formatDuration,
   formatSignedSol,
+  formatSol,
   formatTime,
   makeToEur,
 } from "./format";
@@ -116,7 +117,7 @@ export function HistoryTable({ positions, solPriceEur }: HistoryTableProps) {
                         <ExplorerLink value={position.mint} kind="token" />
                       </td>
                       <td className="py-3 pr-4">
-                        {position.entrySol.toFixed(4)} SOL
+                        {formatSol(position.entrySol)}
                       </td>
                       <td
                         className={`py-3 pr-4 ${

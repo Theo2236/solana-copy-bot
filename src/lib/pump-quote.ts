@@ -1,5 +1,6 @@
 import { SOL_MINT } from "./config";
 import type { JupiterQuote } from "./jupiter";
+import { toQuoteAmountLamports } from "./jupiter";
 
 const PUMP_COIN_URL = "https://frontend-api-v3.pump.fun/coins";
 const FETCH_TIMEOUT_MS = 8_000;
@@ -105,7 +106,7 @@ export type PumpQuoteResult = {
 export async function getPumpBondingCurveQuote(params: {
   inputMint: string;
   outputMint: string;
-  amountLamports: number;
+  amountLamports: number | bigint;
 }): Promise<PumpQuoteResult> {
   const isBuy = params.inputMint === SOL_MINT;
   const isSell = params.outputMint === SOL_MINT;
@@ -133,7 +134,12 @@ export async function getPumpBondingCurveQuote(params: {
     };
   }
 
-  const amount = BigInt(params.amountLamports);
+  const lamports = toQuoteAmountLamports(params.amountLamports);
+  if (lamports === null) {
+    return { quote: null, error: "Ongeldig swapbedrag voor pump-quote" };
+  }
+
+  const amount = BigInt(lamports);
   const outAmount = isBuy
     ? calculatePumpBuyOutAmount(coin, amount)
     : calculatePumpSellOutAmount(coin, amount);
@@ -149,7 +155,7 @@ export async function getPumpBondingCurveQuote(params: {
     quote: {
       inputMint: params.inputMint,
       outputMint: params.outputMint,
-      inAmount: String(params.amountLamports),
+      inAmount: String(lamports),
       outAmount: outAmount.toString(),
       priceImpactPct: "0",
     },

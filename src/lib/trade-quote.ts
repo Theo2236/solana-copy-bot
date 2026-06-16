@@ -1,4 +1,4 @@
-import { getJupiterQuote, type JupiterQuote, type QuoteFailureReason } from "./jupiter";
+import { getJupiterQuote, toQuoteAmountLamports, type JupiterQuote, type QuoteFailureReason } from "./jupiter";
 import { getPumpBondingCurveQuote, isPumpMint } from "./pump-quote";
 
 export type { QuoteFailureReason };
@@ -31,10 +31,13 @@ export { formatQuoteError };
 export async function getTradeQuote(params: {
   inputMint: string;
   outputMint: string;
-  amountLamports: number;
+  amountLamports: number | bigint;
   slippageBps: number;
 }): Promise<TradeQuoteResult> {
-  if (params.amountLamports < 1) {
+  if (
+    (typeof params.amountLamports === "number" && params.amountLamports < 1) ||
+    (typeof params.amountLamports === "bigint" && params.amountLamports < 1n)
+  ) {
     return {
       quote: null,
       error: {
@@ -44,7 +47,18 @@ export async function getTradeQuote(params: {
     };
   }
 
-  const jupiter = await getJupiterQuote(params);
+  const lamports = toQuoteAmountLamports(params.amountLamports);
+  if (lamports === null) {
+    return {
+      quote: null,
+      error: {
+        reason: "amount_too_small",
+        message: `Ongeldig swapbedrag (${params.amountLamports} lamports)`,
+      },
+    };
+  }
+
+  const jupiter = await getJupiterQuote({ ...params, amountLamports: lamports });
   if (jupiter.quote) {
     return { quote: jupiter.quote, source: "jupiter" };
   }
@@ -66,7 +80,7 @@ export async function getTradeQuote(params: {
   const pump = await getPumpBondingCurveQuote({
     inputMint: params.inputMint,
     outputMint: params.outputMint,
-    amountLamports: params.amountLamports,
+    amountLamports: lamports,
   });
 
   if (pump.quote) {

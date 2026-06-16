@@ -1,10 +1,16 @@
 import type { Position, TradeEvent } from "@/lib/types";
 
+function isDisplayNumber(value: number): boolean {
+  return Number.isFinite(value);
+}
+
 export function formatSol(value: number): string {
+  if (!isDisplayNumber(value)) return "—";
   return `${value.toFixed(4)} SOL`;
 }
 
 export function formatSignedSol(value: number): string {
+  if (!isDisplayNumber(value)) return "—";
   return `${value >= 0 ? "+" : ""}${value.toFixed(4)} SOL`;
 }
 
@@ -53,8 +59,12 @@ export function formatDuration(fromIso?: string, toIso?: string): string {
 }
 
 export function makeToEur(solPriceEur: number | null) {
-  return (sol: number): string =>
-    solPriceEur !== null ? formatEur(sol * solPriceEur) : "—";
+  return (sol: number): string => {
+    if (!isDisplayNumber(sol) || solPriceEur === null || !isDisplayNumber(solPriceEur)) {
+      return "—";
+    }
+    return formatEur(sol * solPriceEur);
+  };
 }
 
 export const EVENT_STYLES: Record<
