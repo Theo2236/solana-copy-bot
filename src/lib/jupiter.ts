@@ -1,6 +1,16 @@
 import { SOL_MINT } from "./config";
 import { getBotPublicKey, sendVersionedTransaction } from "./solana";
 
+export type QuoteFailureReason =
+  | "api_error"
+  | "token_not_tradable"
+  | "no_route"
+  | "amount_too_small"
+  | "timeout"
+  | "pump_graduated"
+  | "pump_no_data"
+  | "unknown";
+
 /** V6-host quote-api.jup.ag is uitgefaseerd; lite-api is het actieve endpoint. */
 const JUPITER_QUOTE_URL = "https://lite-api.jup.ag/swap/v1/quote";
 const JUPITER_SWAP_URL = "https://lite-api.jup.ag/swap/v1/swap";
@@ -12,6 +22,40 @@ export interface JupiterQuote {
   inAmount: string;
   outAmount: string;
   priceImpactPct: string;
+}
+
+export type JupiterQuoteResult = {
+  quote: JupiterQuote | null;
+  error?: {
+    reason: QuoteFailureReason;
+    message: string;
+    statusCode?: number;
+    errorCode?: string;
+  };
+};
+
+type JupiterErrorBody = {
+  error?: string;
+  errorCode?: string;
+  message?: string;
+};
+
+function mapJupiterError(
+  status: number,
+  body: JupiterErrorBody,
+): JupiterQuoteResult["error"] {
+  const errorCode = body.errorCode;
+  const message =
+    body.error ?? body.message ?? `Jupiter HTTP ${status}`;
+
+  let reason: QuoteFailureReason = "api_error";
+  if (errorCode === "TOKEN_NOT_TRADABLE") reason = "token_not_tradable";
+  else if (errorCode === "COULD_NOT_FIND_ANY_ROUTE") reason = "no_route";
+  else if (status === 400 && message.toLowerCase().includes("route")) {
+    reason = "no_route";
+  } else if (status >= 500) reason = "api_error";
+
+  return { reason, message, statusCode: status, errorCode };
 }
 
 async function fetchWithTimeout(
@@ -27,30 +71,75 @@ async function fetchWithTimeout(
   }
 }
 
+export async function getJupiterQuote(params: {
+  inputMint: string;
+  outputMint: string;
+  amountLamports: number;
+  slippageBps: number;
+}): Promise<JupiterQuoteResult> {
+  const url = new URL(JUPITER_QUOTE_URL);
+  url.searchParams.set("inputMint", params.inputMint);
+  url.searchParams.set("outputMint", params.outputMint);
+  url.searchParams.set("amount", String(params.amountLamports));
+  url.searchParams.set("slippageBps", String(params.slippageBps));
+  // Aanbevolen door Jupiter: ruimte voor pump.fun / DLMM-routes.
+  url.searchParams.set("maxAccounts", "64");
+
+  try {
+    const response = await fetchWithTimeout(url, { next: { revalidate: 0 } });
+    if (!response.ok) {
+      let body: JupiterErrorBody = {};
+      try {
+        body = (await response.json()) as JupiterErrorBody;
+      } catch {
+        body = { error: await response.text() };
+      }
+      const error = mapJupiterError(response.status, body);
+      console.error("Jupiter quote failed", error);
+      return { quote: null, error };
+    }
+
+    const quote = (await response.json()) as JupiterQuote;
+    if (!quote?.outAmount || quote.outAmount === "0") {
+      return {
+        quote: null,
+        error: {
+          reason: "no_route",
+          message: "Jupiter quote zonder output amount",
+        },
+      };
+    }
+
+    return { quote };
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "Jupiter quote timeout"
+        : error instanceof Error
+          ? error.message
+          : "Jupiter quote fetch error";
+    console.error("Jupiter quote fetch error", error);
+    return {
+      quote: null,
+      error: {
+        reason: error instanceof Error && error.name === "AbortError"
+          ? "timeout"
+          : "unknown",
+        message,
+      },
+    };
+  }
+}
+
+/** Backwards-compatible wrapper — retourneert alleen de quote of null. */
 export async function getQuote(params: {
   inputMint: string;
   outputMint: string;
   amountLamports: number;
   slippageBps: number;
 }): Promise<JupiterQuote | null> {
-  const url = new URL(JUPITER_QUOTE_URL);
-  url.searchParams.set("inputMint", params.inputMint);
-  url.searchParams.set("outputMint", params.outputMint);
-  url.searchParams.set("amount", String(params.amountLamports));
-  url.searchParams.set("slippageBps", String(params.slippageBps));
-
-  try {
-    const response = await fetchWithTimeout(url, { next: { revalidate: 0 } });
-    if (!response.ok) {
-      console.error("Jupiter quote failed", await response.text());
-      return null;
-    }
-
-    return (await response.json()) as JupiterQuote;
-  } catch (error) {
-    console.error("Jupiter quote fetch error", error);
-    return null;
-  }
+  const result = await getJupiterQuote(params);
+  return result.quote;
 }
 
 export async function executeSwap(params: {
@@ -64,7 +153,7 @@ export async function executeSwap(params: {
     throw new Error("Bot wallet not configured");
   }
 
-  const quote = await getQuote(params);
+  const { quote } = await getJupiterQuote(params);
   if (!quote) {
     throw new Error("No Jupiter quote available");
   }

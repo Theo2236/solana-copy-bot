@@ -1,7 +1,9 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { getBotConfig, isCopyableMint, isDryRun, SOL_MINT } from "./config";
 import { computeCopyTradeSize, formatConvictionPct } from "./copy-sizing";
-import { buyTokenWithSol, getQuote, sellTokenForSol } from "./jupiter";
+import { buyTokenWithSol, getJupiterQuote, sellTokenForSol } from "./jupiter";
+import { formatQuoteError, getTradeQuote } from "./trade-quote";
+import type { QuoteSource } from "./trade-quote";
 import {
   addEvent,
   addTargetHolding,
@@ -237,40 +239,40 @@ async function handleCopyBuy(
   const averagedIn = Boolean(existing);
 
   if (isDryRun()) {
-    // Echte quote ophalen zodat de gesimuleerde positie een realistische
-    // token-hoeveelheid krijgt; daarmee wordt de dry-run PnL marktgebaseerd.
-    const quote = await getQuote({
+    const quoteResult = await getTradeQuote({
       inputMint: SOL_MINT,
       outputMint: swap.mint,
       amountLamports: Math.floor(tradeSol * LAMPORTS_PER_SOL),
       slippageBps: config.slippageBps,
     });
 
-    let quantityRaw: string | undefined;
-    if (quote) {
-      const impact = Number(quote.priceImpactPct) * 100;
-      if (Number.isFinite(impact) && impact > MAX_BUY_PRICE_IMPACT_PCT) {
-        await logSkip(
-          swap,
-          `Price impact te hoog (${impact.toFixed(1)}% > ${MAX_BUY_PRICE_IMPACT_PCT}%) — te illiquide`,
-        );
-        return;
-      }
-      quantityRaw = quote.outAmount;
+    if (!quoteResult.quote) {
+      await logSkip(swap, `Geen quote: ${formatQuoteError(quoteResult)}`);
+      return;
     }
 
-    const merged = mergeBuy(existing, swap, tradeSol, quantityRaw);
+    const quote = quoteResult.quote;
+    const impact = Number(quote.priceImpactPct) * 100;
+    if (Number.isFinite(impact) && impact > MAX_BUY_PRICE_IMPACT_PCT) {
+      await logSkip(
+        swap,
+        `Price impact te hoog (${impact.toFixed(1)}% > ${MAX_BUY_PRICE_IMPACT_PCT}%) — te illiquide`,
+      );
+      return;
+    }
+
+    const merged = mergeBuy(existing, swap, tradeSol, quote.outAmount);
     await upsertPosition(merged);
     await incrementTradesToday();
     const verb = averagedIn ? `Bijgekocht (#${merged.buyCount})` : "Zou kopen";
-    const quoteNote = quote ? "" : " (geen Jupiter-quote — geschatte positie)";
+    const sourceNote = quoteSourceLabel(quoteResult.source);
     await addEvent({
       id: createEventId(),
       timestamp: new Date().toISOString(),
       type: "copy_buy",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `[DRY RUN] ${verb} ${tradeSol} SOL op ${swap.mint}${convictionNote}${quoteNote}`,
+      message: `[DRY RUN] ${verb} ${tradeSol} SOL op ${swap.mint}${convictionNote}${sourceNote}`,
       txSignature: swap.signature,
       metadata: {
         mode: "dry_run",
@@ -278,6 +280,7 @@ async function handleCopyBuy(
         tradeSol,
         buyCount: merged.buyCount,
         averagedIn,
+        quoteSource: quoteResult.source ?? null,
         ...sizingMeta,
       },
     });
@@ -285,7 +288,7 @@ async function handleCopyBuy(
   }
 
   try {
-    const preQuote = await getQuote({
+    const { quote: preQuote } = await getJupiterQuote({
       inputMint: SOL_MINT,
       outputMint: swap.mint,
       amountLamports: Math.floor(tradeSol * LAMPORTS_PER_SOL),
@@ -363,9 +366,20 @@ async function handleCopySell(
   if (isDryRun()) {
     if (sellAll) {
       const exitSol = await quoteSellSol(position);
-      const pnlSol =
-        exitSol !== null ? exitSol - position.entrySol : estimatePnl(position);
-      const marketBased = exitSol !== null;
+      if (exitSol === null) {
+        await addEvent({
+          id: createEventId(),
+          timestamp: new Date().toISOString(),
+          type: "error",
+          wallet: swap.wallet,
+          mint: swap.mint,
+          message: `[DRY RUN] Copy-sell mislukt — geen sell-quote beschikbaar`,
+          txSignature: swap.signature,
+          metadata: { mode: "dry_run" },
+        });
+        return;
+      }
+      const pnlSol = exitSol - position.entrySol;
       await finalizeClose(position, "copy_sell", position.entrySol + pnlSol, pnlSol);
       await recordTradeResult(pnlSol);
       await addEvent({
@@ -374,9 +388,9 @@ async function handleCopySell(
         type: "copy_sell",
         wallet: swap.wallet,
         mint: swap.mint,
-        message: `[DRY RUN] Positie gesloten op copy-sell (PnL ${pnlSol.toFixed(4)} SOL${marketBased ? "" : ", schatting"})`,
+        message: `[DRY RUN] Positie gesloten op copy-sell (PnL ${pnlSol.toFixed(4)} SOL)`,
         txSignature: swap.signature,
-        metadata: { mode: "dry_run", marketBased },
+        metadata: { mode: "dry_run", marketBased: true },
       });
       return;
     }
@@ -384,10 +398,20 @@ async function handleCopySell(
     const exitPortion = await quoteSellSolForAmount(position.mint, sellQty);
     const portionEntrySol =
       position.entrySol * (Number(sellQty) / Number(remaining));
-    const pnlSol =
-      exitPortion !== null
-        ? exitPortion - portionEntrySol
-        : portionEntrySol * 0.05 * (Math.random() > 0.5 ? 1 : -1);
+    if (exitPortion === null) {
+      await addEvent({
+        id: createEventId(),
+        timestamp: new Date().toISOString(),
+        type: "error",
+        wallet: swap.wallet,
+        mint: swap.mint,
+        message: `[DRY RUN] Deels verkopen mislukt — geen sell-quote beschikbaar`,
+        txSignature: swap.signature,
+        metadata: { mode: "dry_run", partial: true, sellFraction },
+      });
+      return;
+    }
+    const pnlSol = exitPortion - portionEntrySol;
 
     applyPartialSell(position, remaining - sellQty, portionEntrySol, pnlSol);
     await upsertPosition(position);
@@ -501,10 +525,6 @@ function applyPartialSell(
   position.lastSellAt = new Date().toISOString();
 }
 
-function estimatePnl(position: Position): number {
-  return position.entrySol * 0.05 * (Math.random() > 0.5 ? 1 : -1);
-}
-
 /**
  * Haalt de actuele SOL-waarde van een positie op via een Jupiter sell-quote.
  * Geeft `null` terug als er geen quantity of quote beschikbaar is.
@@ -523,16 +543,23 @@ async function quoteSellSolForAmount(
   const amount = Number(tokenAmountRaw);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
-  const quote = await getQuote({
+  const quoteResult = await getTradeQuote({
     inputMint: mint,
     outputMint: SOL_MINT,
     amountLamports: Math.floor(amount),
     slippageBps: getBotConfig().slippageBps,
   });
-  if (!quote) return null;
+  if (!quoteResult.quote) return null;
 
-  const outSol = Number(quote.outAmount) / LAMPORTS_PER_SOL;
+  const outSol = Number(quoteResult.quote.outAmount) / LAMPORTS_PER_SOL;
   return Number.isFinite(outSol) ? outSol : null;
+}
+
+function quoteSourceLabel(source: QuoteSource | undefined): string {
+  if (source === "pump_bonding_curve") {
+    return " (quote: pump.fun bonding curve)";
+  }
+  return "";
 }
 
 async function logSkip(swap: ParsedSwap, reason: string): Promise<void> {
