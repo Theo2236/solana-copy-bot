@@ -49,7 +49,6 @@ export function SettingsPanel({
         ]
       : []),
     { label: "Max open posities", value: String(config.maxOpenPositions) },
-    { label: "Max trades / dag", value: String(config.maxTradesPerDay) },
     { label: "Stop loss", value: `-${config.stopLossPct}%` },
     {
       label: "Take profit",

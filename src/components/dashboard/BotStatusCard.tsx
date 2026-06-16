@@ -66,7 +66,6 @@ export function BotStatusCard({ stats, config, botWallet }: BotStatusCardProps) 
             </li>
           )}
           <li>Max posities: {config.maxOpenPositions}</li>
-          <li>Max trades/dag: {config.maxTradesPerDay}</li>
           <li>
             SL: -{config.stopLossPct}%
             {config.takeProfitPct > 0

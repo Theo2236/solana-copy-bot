@@ -25,7 +25,6 @@ export interface BotConfig {
   minCopyTradeSol: number;
   maxCopyTradeSol: number;
   maxOpenPositions: number;
-  maxTradesPerDay: number;
   stopLossPct: number;
   takeProfitPct: number;
   maxDrawdownEur: number;

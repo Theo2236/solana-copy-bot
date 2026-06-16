@@ -104,10 +104,9 @@ export function getBotConfig(): BotConfig {
     tradeSizeSol,
     copySizeMode: copySizeModeFromEnv(),
     referenceConvictionPct: Number(process.env.COPY_REFERENCE_CONVICTION_PCT ?? "0.1"),
-    minCopyTradeSol: Number(process.env.MIN_COPY_TRADE_SOL ?? "0.01"),
-    maxCopyTradeSol: Number(process.env.MAX_COPY_TRADE_SOL ?? String(tradeSizeSol * 5)),
+    minCopyTradeSol: Number(process.env.MIN_COPY_TRADE_SOL ?? "0.02"),
+    maxCopyTradeSol: Number(process.env.MAX_COPY_TRADE_SOL ?? "1.0"),
     maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS ?? "3"),
-    maxTradesPerDay: Number(process.env.MAX_TRADES_PER_DAY ?? "5"),
     stopLossPct: Number(process.env.STOP_LOSS_PCT ?? "30"),
     // 0 = uit — pump.fun is alles-of-niets; exit via target copy-sell (of SL).
     takeProfitPct: Number(process.env.TAKE_PROFIT_PCT ?? "0"),

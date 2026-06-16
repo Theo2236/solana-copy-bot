@@ -43,7 +43,7 @@ export function KpiGrid({ stats, derived, config, solPriceEur }: KpiGridProps) {
     {
       label: "Totaal trades",
       value: String(stats.totalTrades),
-      sub: `${stats.tradesToday} vandaag · max ${config.maxTradesPerDay}/dag`,
+      sub: `${stats.tradesToday} vandaag`,
     },
     {
       label: "Gem. PnL / trade",

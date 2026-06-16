@@ -11,7 +11,6 @@ import {
   getStats,
   getTargetHolding,
   getTargets,
-  getTradesToday,
   incrementTradesToday,
   markSignatureProcessed,
   recordTradeResult,
@@ -150,13 +149,7 @@ async function handleCopyBuy(
 ): Promise<void> {
   const positions = await getPositions();
   const openPositions = positions.filter((p) => p.status === "open");
-  const tradesToday = await getTradesToday();
   const existing = openPositions.find((p) => p.mint === swap.mint);
-
-  if (tradesToday >= config.maxTradesPerDay) {
-    await logSkip(swap, "Daglimiet trades bereikt");
-    return;
-  }
 
   // Alleen een nieuwe mint telt mee voor max open posities; bijkopen op een
   // bestaande positie (averaging-in) mag altijd.
