@@ -57,7 +57,6 @@ export function SettingsPanel({
           ? `+${config.takeProfitPct}%`
           : "Uit (exit via copy-sell)",
     },
-    { label: "Max drawdown", value: `€${config.maxDrawdownEur}` },
     {
       label: "Min liquiditeit",
       value: `$${config.minLiquidityUsd.toLocaleString("nl-NL")}`,

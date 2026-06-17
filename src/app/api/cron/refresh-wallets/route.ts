@@ -10,13 +10,23 @@ export async function GET(request: Request) {
   }
 
   const existing = await getTargets();
-  const merged = DEFAULT_TARGETS.map((defaults) => {
+  const defaultAddresses = new Set<string>(
+    DEFAULT_TARGETS.map((t) => t.address),
+  );
+
+  const refreshedDefaults = DEFAULT_TARGETS.map((defaults) => {
     const current = existing.find((e) => e.address === defaults.address);
     return {
       ...defaults,
       enabled: current?.enabled ?? defaults.enabled,
     };
   });
+
+  // Handmatig toegevoegde wallets behouden — alleen defaults verversen.
+  const customTargets = existing.filter(
+    (t) => !defaultAddresses.has(t.address),
+  );
+  const merged = [...refreshedDefaults, ...customTargets];
 
   await saveTargets(merged);
 

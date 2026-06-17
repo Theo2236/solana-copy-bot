@@ -27,7 +27,6 @@ export interface BotConfig {
   maxOpenPositions: number;
   stopLossPct: number;
   takeProfitPct: number;
-  maxDrawdownEur: number;
   minLiquidityUsd: number;
   minTokenAgeHours: number;
   slippageBps: number;

@@ -1,7 +1,7 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { getBotConfig, isCopyableMint, isDryRun, SOL_MINT } from "./config";
 import { computeCopyTradeSize, formatConvictionPct } from "./copy-sizing";
-import { buyTokenWithSol, getJupiterQuote, sellTokenForSol } from "./jupiter";
+import { buyTokenWithSol, sellTokenForSol } from "./jupiter";
 import { formatQuoteError, getTradeQuote } from "./trade-quote";
 import type { QuoteSource } from "./trade-quote";
 import {
@@ -10,7 +10,6 @@ import {
   createEventId,
   getBotEnabledState,
   getPositions,
-  getStats,
   getTargetHolding,
   getTargets,
   incrementTradesToday,
@@ -21,7 +20,6 @@ import {
 } from "./store";
 import type { ParsedSwap, Position } from "./types";
 import { getBotBalanceSol } from "./solana";
-import { getSolPriceEur } from "./price";
 import { getTokenMarketData } from "./token-data";
 
 /** Maximale price impact (%) op een buy-quote voordat we de trade als te illiquide skippen. */
@@ -160,26 +158,6 @@ async function handleCopyBuy(
     return;
   }
 
-  // Max drawdown: bij een gerealiseerd verlies (in EUR) boven de limiet stoppen
-  // we met nieuwe buys. Bestaande posities blijven open en worden via stop
-  // loss / take profit afgehandeld.
-  if (config.maxDrawdownEur > 0) {
-    const stats = await getStats();
-    if (stats.realizedPnlSol < 0) {
-      const solEur = await getSolPriceEur();
-      if (solEur !== null) {
-        const realizedEur = stats.realizedPnlSol * solEur;
-        if (-realizedEur >= config.maxDrawdownEur) {
-          await logSkip(
-            swap,
-            `Max drawdown bereikt (€${(-realizedEur).toFixed(2)} ≥ €${config.maxDrawdownEur})`,
-          );
-          return;
-        }
-      }
-    }
-  }
-
   // Liquiditeit + tokenleeftijd controleren via Dexscreener. Bij ontbrekende
   // data (API down / geen pairs) gaan we fail-open verder; de price-impact-guard
   // op de quote vangt extreem illiquide tokens alsnog af.
@@ -293,14 +271,14 @@ async function handleCopyBuy(
   }
 
   try {
-    const { quote: preQuote } = await getJupiterQuote({
+    const preQuoteResult = await getTradeQuote({
       inputMint: SOL_MINT,
       outputMint: swap.mint,
       amountLamports: Math.floor(tradeSol * LAMPORTS_PER_SOL),
       slippageBps: config.slippageBps,
     });
-    if (preQuote) {
-      const impact = Number(preQuote.priceImpactPct) * 100;
+    if (preQuoteResult.quote) {
+      const impact = Number(preQuoteResult.quote.priceImpactPct) * 100;
       if (Number.isFinite(impact) && impact > MAX_BUY_PRICE_IMPACT_PCT) {
         await logSkip(
           swap,
