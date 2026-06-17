@@ -116,6 +116,12 @@ export function getBotConfig(): BotConfig {
     minLiquidityUsd: Number(process.env.MIN_LIQUIDITY_USD ?? "2000"),
     minTokenAgeHours: Number(process.env.MIN_TOKEN_AGE_HOURS ?? "0"),
     slippageBps: Number(process.env.SLIPPAGE_BPS ?? "300"),
+    targetAutoDisableMinTrades: Number(
+      process.env.TARGET_AUTO_DISABLE_MIN_TRADES ?? "3",
+    ),
+    targetAutoDisableMaxLossSol: Number(
+      process.env.TARGET_AUTO_DISABLE_MAX_LOSS_SOL ?? "-0.05",
+    ),
     targets: DEFAULT_TARGETS.map((t) => ({ ...t })),
   };
 }

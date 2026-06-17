@@ -66,6 +66,13 @@ export function SettingsPanel({
       value: `${config.minTokenAgeHours}u`,
     },
     { label: "Slippage", value: `${config.slippageBps} bps` },
+    {
+      label: "Auto-disable targets",
+      value:
+        config.targetAutoDisableMinTrades > 0
+          ? `≥${config.targetAutoDisableMinTrades} trades & <${config.targetAutoDisableMaxLossSol} SOL`
+          : "Uit",
+    },
   ];
 
   return (

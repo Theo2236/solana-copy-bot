@@ -28,6 +28,7 @@ Open http://localhost:3000 — dashboard-wachtwoord staat in Vercel env (`DASHBO
 | Helius webhook + cron poll | ✅ |
 | Upstash Redis state | ✅ |
 | Dry-run modus | ✅ getest |
+| pump.fun live (PumpPortal) | ✅ |
 | Dashboard wachtwoord | ✅ |
 | EUR winst + SOL koers (CoinGecko) | ✅ |
 | Positie-historie tabel | ✅ |

@@ -79,6 +79,18 @@ export async function sendVersionedTransaction(
   return signature;
 }
 
+/** Verstuurt een reeds gesigneerde versioned transaction. */
+export async function sendSignedVersionedTransaction(
+  tx: VersionedTransaction,
+): Promise<string> {
+  const signature = await getConnection().sendTransaction(tx, {
+    skipPreflight: false,
+    maxRetries: 2,
+  });
+  await getConnection().confirmTransaction(signature, "confirmed");
+  return signature;
+}
+
 export function isValidPublicKey(value: string): boolean {
   try {
     new PublicKey(value);

@@ -30,6 +30,10 @@ export interface BotConfig {
   minLiquidityUsd: number;
   minTokenAgeHours: number;
   slippageBps: number;
+  /** Min. gesloten copy-trades voordat auto-disable wordt overwogen (0 = uit). */
+  targetAutoDisableMinTrades: number;
+  /** Targets met PnL onder deze drempel (SOL) worden uitgeschakeld. */
+  targetAutoDisableMaxLossSol: number;
   targets: TargetWallet[];
 }
 

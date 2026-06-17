@@ -10,14 +10,17 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { processed, targets } = await runTargetPoll(3);
+  const { processed, targets, disabledTargets } = await runTargetPoll(5);
 
   await addEvent({
     id: createEventId(),
     timestamp: new Date().toISOString(),
     type: "cron_poll",
-    message: `Cron poll afgerond (${processed} swaps gecontroleerd)`,
+    message:
+      disabledTargets.length > 0
+        ? `Cron poll afgerond (${processed} swaps) — targets uit: ${disabledTargets.join(", ")}`
+        : `Cron poll afgerond (${processed} swaps gecontroleerd)`,
   });
 
-  return Response.json({ ok: true, processed, targets });
+  return Response.json({ ok: true, processed, targets, disabledTargets });
 }

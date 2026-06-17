@@ -13,16 +13,19 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { processed, targets } = await runTargetPoll(8);
+    const { processed, targets, disabledTargets } = await runTargetPoll(8);
 
     await addEvent({
       id: createEventId(),
       timestamp: new Date().toISOString(),
       type: "cron_poll",
-      message: `Handmatige refresh: ${processed} swaps gecontroleerd (${targets} wallets)`,
+      message:
+        disabledTargets.length > 0
+          ? `Handmatige refresh: ${processed} swaps (${targets} wallets) — targets uit: ${disabledTargets.join(", ")}`
+          : `Handmatige refresh: ${processed} swaps gecontroleerd (${targets} wallets)`,
     });
 
-    return Response.json({ ok: true, processed, targets });
+    return Response.json({ ok: true, processed, targets, disabledTargets });
   } catch (error) {
     console.error("Manual poll error", error);
     return Response.json(

@@ -1,7 +1,7 @@
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { getBotConfig, isCopyableMint, isDryRun, SOL_MINT } from "./config";
 import { computeCopyTradeSize, formatConvictionPct } from "./copy-sizing";
-import { buyTokenWithSol, sellTokenForSol } from "./jupiter";
+import { executeBuyTokenWithSol, executeSellTokenForSol } from "./trade-execute";
 import { formatQuoteError, getTradeQuote } from "./trade-quote";
 import type { QuoteSource } from "./trade-quote";
 import {
@@ -288,7 +288,7 @@ async function handleCopyBuy(
       }
     }
 
-    const result = await buyTokenWithSol({
+    const result = await executeBuyTokenWithSol({
       mint: swap.mint,
       solAmount: tradeSol,
       slippageBps: config.slippageBps,
@@ -298,15 +298,22 @@ async function handleCopyBuy(
     await upsertPosition(merged);
     await incrementTradesToday();
     const verb = averagedIn ? `Bijgekocht (#${merged.buyCount})` : "Gekocht";
+    const sourceNote = quoteSourceLabel(result.source);
     await addEvent({
       id: createEventId(),
       timestamp: new Date().toISOString(),
       type: "copy_buy",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `${verb}: ${tradeSol} SOL → ${swap.mint}${convictionNote}`,
+      message: `${verb}: ${tradeSol} SOL → ${swap.mint}${convictionNote}${sourceNote}`,
       txSignature: result.signature,
-      metadata: { tradeSol, buyCount: merged.buyCount, averagedIn, ...sizingMeta },
+      metadata: {
+        tradeSol,
+        buyCount: merged.buyCount,
+        averagedIn,
+        executionSource: result.source,
+        ...sizingMeta,
+      },
     });
   } catch (error) {
     await addEvent({
@@ -425,7 +432,7 @@ async function handleCopySell(
   const qtyToSell = sellAll ? remaining : sellQty;
 
   try {
-    const result = await sellTokenForSol({
+    const result = await executeSellTokenForSol({
       mint: swap.mint,
       tokenAmount: qtyToSell.toString(),
       slippageBps: getBotConfig().slippageBps,
@@ -623,7 +630,7 @@ async function closePosition(
   if (!position.quantity) return;
 
   try {
-    const result = await sellTokenForSol({
+    const result = await executeSellTokenForSol({
       mint: position.mint,
       tokenAmount: position.quantity,
       slippageBps: getBotConfig().slippageBps,
