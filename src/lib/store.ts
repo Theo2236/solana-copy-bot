@@ -6,6 +6,11 @@ import type {
   TradeEvent,
 } from "./types";
 import { getBotConfig, isBotEnabled, isDryRun } from "./config";
+import {
+  computeRealizedPnlFromPositions,
+  computeTradeOutcomeStats,
+  reconcileClosedPositionPnl,
+} from "./position-pnl";
 
 const KEYS = {
   events: "bot:events",
@@ -165,7 +170,10 @@ function sanitizePositions(positions: Position[]): {
       continue;
     }
 
-    const cleaned: Position = { ...position };
+    const cleaned = reconcileClosedPositionPnl({ ...position });
+    if (cleaned.pnlSol !== position.pnlSol) {
+      changed = true;
+    }
     if (typeof cleaned.pnlSol === "number" && !Number.isFinite(cleaned.pnlSol)) {
       delete cleaned.pnlSol;
       changed = true;
@@ -390,14 +398,16 @@ export async function getStats(balanceSol = 0): Promise<BotStats> {
   const events = await getRecentEvents(1);
   const positions = await getPositions();
   const openPositions = positions.filter((p) => p.status === "open");
+  const { wins, losses } = computeTradeOutcomeStats(positions);
+  const realizedPnlSol = computeRealizedPnlFromPositions(positions);
 
   return {
     balanceSol,
     openPositions: openPositions.length,
-    totalTrades: Number((await kvGet(KEYS.totalTrades)) ?? "0"),
-    wins: Number((await kvGet(KEYS.wins)) ?? "0"),
-    losses: Number((await kvGet(KEYS.losses)) ?? "0"),
-    realizedPnlSol: Number((await kvGet(KEYS.realizedPnl)) ?? "0"),
+    totalTrades: wins + losses,
+    wins,
+    losses,
+    realizedPnlSol,
     tradesToday: await getTradesToday(),
     lastEventAt: events[0]?.timestamp,
     botEnabled: await getBotEnabledState(),
