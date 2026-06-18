@@ -39,6 +39,9 @@ export function Dashboard() {
   const [busyTarget, setBusyTarget] = useState<string | null>(null);
   const [addBusy, setAddBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [sellingPositionId, setSellingPositionId] = useState<string | null>(
+    null,
+  );
 
   const fetchStats = useCallback(async () => {
     try {
@@ -300,6 +303,60 @@ export function Dashboard() {
     }
   }
 
+  async function handleManualSell(positionId: string) {
+    if (!data) return;
+    const position = data.positions.find((p) => p.id === positionId);
+    if (!position) return;
+
+    const modeLabel =
+      data.stats.mode === "live" ? "LIVE verkopen" : "DRY RUN simuleren";
+    const confirmed = window.confirm(
+      `${modeLabel}: volledige positie sluiten voor ${position.symbol ?? position.mint.slice(0, 8)}…?`,
+    );
+    if (!confirmed) return;
+
+    setSellingPositionId(positionId);
+    try {
+      const response = await fetch(
+        "/api/positions/sell",
+        dashboardFetchInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ positionId }),
+        }),
+      );
+      const json = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        pnlSol?: number;
+        dryRun?: boolean;
+      };
+
+      if (!response.ok) {
+        throw new Error(json.error ?? "Verkopen mislukt");
+      }
+
+      const pnl =
+        typeof json.pnlSol === "number"
+          ? `${json.pnlSol >= 0 ? "+" : ""}${json.pnlSol.toFixed(4)} SOL`
+          : "";
+      setFeedback({
+        tone: "ok",
+        message: json.dryRun
+          ? `[DRY RUN] Positie gesloten${pnl ? ` (${pnl})` : ""}`
+          : `Positie verkocht${pnl ? ` (${pnl})` : ""}`,
+      });
+      await fetchStats();
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Verkopen mislukt",
+      });
+    } finally {
+      setSellingPositionId(null);
+    }
+  }
+
   async function exportHistory() {
     try {
       const response = await fetch(
@@ -462,6 +519,9 @@ export function Dashboard() {
               marks={openPositionMarks}
               targets={targets}
               solPriceEur={solPriceEur}
+              mode={stats.mode}
+              sellingPositionId={sellingPositionId}
+              onSell={handleManualSell}
             />
             <TargetPerformanceTable
               performance={targetPerformance}

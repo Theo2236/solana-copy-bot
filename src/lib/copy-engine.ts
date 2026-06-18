@@ -673,3 +673,111 @@ async function closePosition(
     });
   }
 }
+
+export type ManualSellResult =
+  | {
+      ok: true;
+      pnlSol: number;
+      exitSol: number;
+      signature?: string;
+      dryRun: boolean;
+    }
+  | { ok: false; error: string };
+
+/** Sluit een open positie volledig via het dashboard (handmatige sell). */
+export async function manualSellPosition(
+  positionId: string,
+): Promise<ManualSellResult> {
+  const positions = await getPositions();
+  const position = positions.find(
+    (p) => p.id === positionId && p.status === "open",
+  );
+
+  if (!position) {
+    return { ok: false, error: "Open positie niet gevonden" };
+  }
+
+  if (!position.quantity) {
+    return {
+      ok: false,
+      error: "Geen token quantity opgeslagen — verkopen niet mogelijk",
+    };
+  }
+
+  const remaining = safeBigInt(position.quantity);
+  if (remaining <= 0n) {
+    return { ok: false, error: "Positie heeft geen tokens meer" };
+  }
+
+  const config = getBotConfig();
+  const dryRun = isDryRun();
+
+  if (dryRun) {
+    const exitSol = await quoteSellSol(position);
+    if (exitSol === null) {
+      await addEvent({
+        id: createEventId(),
+        timestamp: new Date().toISOString(),
+        type: "error",
+        mint: position.mint,
+        message: "[DRY RUN] Handmatige sell mislukt — geen sell-quote beschikbaar",
+        metadata: { mode: "dry_run", reason: "manual" },
+      });
+      return { ok: false, error: "Geen sell-quote beschikbaar" };
+    }
+
+    const pnlSol = exitSol - position.entrySol;
+    await finalizeClose(position, "manual", exitSol, pnlSol);
+    await recordTradeResult(pnlSol);
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "position_close",
+      mint: position.mint,
+      message: `[DRY RUN] Handmatig verkocht (PnL ${pnlSol.toFixed(4)} SOL)`,
+      metadata: { mode: "dry_run", reason: "manual" },
+    });
+    return { ok: true, pnlSol, exitSol, dryRun: true };
+  }
+
+  try {
+    const result = await executeSellTokenForSol({
+      mint: position.mint,
+      tokenAmount: remaining.toString(),
+      slippageBps: config.slippageBps,
+    });
+
+    const exitSol = Number(result.quote.outAmount) / LAMPORTS_PER_SOL;
+    const pnlSol = exitSol - position.entrySol;
+    await finalizeClose(position, "manual", exitSol, pnlSol);
+    await recordTradeResult(pnlSol);
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "position_close",
+      mint: position.mint,
+      message: `Handmatig verkocht (PnL ${pnlSol.toFixed(4)} SOL)`,
+      txSignature: result.signature,
+      metadata: { reason: "manual", executionSource: result.source },
+    });
+
+    return {
+      ok: true,
+      pnlSol,
+      exitSol,
+      signature: result.signature,
+      dryRun: false,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "onbekend";
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "error",
+      mint: position.mint,
+      message: `Handmatige sell mislukt: ${message}`,
+      metadata: { reason: "manual" },
+    });
+    return { ok: false, error: message };
+  }
+}

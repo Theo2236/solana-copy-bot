@@ -17,6 +17,9 @@ interface OpenPositionsProps {
   marks: OpenPositionMark[];
   targets: TargetWallet[];
   solPriceEur: number | null;
+  mode: "live" | "dry_run";
+  sellingPositionId: string | null;
+  onSell: (positionId: string) => void;
 }
 
 function pnlTone(value: number | null): string {
@@ -31,6 +34,9 @@ export function OpenPositions({
   marks,
   targets,
   solPriceEur,
+  mode,
+  sellingPositionId,
+  onSell,
 }: OpenPositionsProps) {
   const toEur = makeToEur(solPriceEur);
   const labelByAddress = useMemo(() => {
@@ -175,6 +181,21 @@ export function OpenPositions({
                   </>
                 )}
               </dl>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => onSell(position.id)}
+                  disabled={sellingPositionId === position.id}
+                  className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sellingPositionId === position.id
+                    ? "Verkopen…"
+                    : mode === "dry_run"
+                      ? "Simuleer sell"
+                      : "Handmatig verkopen"}
+                </button>
+              </div>
             </div>
           );
         })}
