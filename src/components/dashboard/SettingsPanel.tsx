@@ -67,6 +67,13 @@ export function SettingsPanel({
     },
     { label: "Slippage", value: `${config.slippageBps} bps` },
     {
+      label: "Max price impact (Jupiter)",
+      value:
+        config.maxBuyPriceImpactPct > 0
+          ? `${config.maxBuyPriceImpactPct}%`
+          : "Uit",
+    },
+    {
       label: "Auto-disable targets",
       value:
         config.targetAutoDisableMinTrades > 0

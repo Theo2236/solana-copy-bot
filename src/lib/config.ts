@@ -116,6 +116,9 @@ export function getBotConfig(): BotConfig {
     minLiquidityUsd: Number(process.env.MIN_LIQUIDITY_USD ?? "2000"),
     minTokenAgeHours: Number(process.env.MIN_TOKEN_AGE_HOURS ?? "0"),
     slippageBps: Number(process.env.SLIPPAGE_BPS ?? "300"),
+    // Memecoins/pump.fun hebben vaak 30–60%+ impact op kleine trades; 10% was te streng.
+    // Pump.fun bonding-curve quotes vallen buiten deze check. 0 = guard uit.
+    maxBuyPriceImpactPct: Number(process.env.MAX_BUY_PRICE_IMPACT_PCT ?? "50"),
     targetAutoDisableMinTrades: Number(
       process.env.TARGET_AUTO_DISABLE_MIN_TRADES ?? "3",
     ),

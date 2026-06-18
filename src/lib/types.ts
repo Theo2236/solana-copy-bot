@@ -30,6 +30,8 @@ export interface BotConfig {
   minLiquidityUsd: number;
   minTokenAgeHours: number;
   slippageBps: number;
+  /** Max price impact (%) op Jupiter-buy; 0 = uit. Pump.fun bonding curve is uitgezonderd. */
+  maxBuyPriceImpactPct: number;
   /** Min. gesloten copy-trades voordat auto-disable wordt overwogen (0 = uit). */
   targetAutoDisableMinTrades: number;
   /** Targets met PnL onder deze drempel (SOL) worden uitgeschakeld. */

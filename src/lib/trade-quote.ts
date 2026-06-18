@@ -1,3 +1,4 @@
+import { SOL_MINT } from "./config";
 import { getJupiterQuote, toQuoteAmountLamports, type JupiterQuote, type QuoteFailureReason } from "./jupiter";
 import { getPumpBondingCurveQuote, isPumpMint } from "./pump-quote";
 
@@ -24,9 +25,14 @@ function formatQuoteError(result: TradeQuoteResult): string {
 
 export { formatQuoteError };
 
+function tokenMintFromSwap(inputMint: string, outputMint: string): string {
+  return inputMint === SOL_MINT ? outputMint : inputMint;
+}
+
 /**
- * Haalt een echte swap-quote op: eerst Jupiter, daarna pump.fun bonding curve
- * als fallback voor verse pump-mints die Jupiter (nog) niet routeert.
+ * Haalt een swap-quote op. Voor pump.fun-mints op de bonding curve gebruiken we
+ * de curve-berekening eerst (nauwkeuriger, geen misleidende Jupiter-impact).
+ * Daarna Jupiter als fallback (graduated tokens, andere routes).
  */
 export async function getTradeQuote(params: {
   inputMint: string;
@@ -58,43 +64,37 @@ export async function getTradeQuote(params: {
     };
   }
 
+  const tokenMint = tokenMintFromSwap(params.inputMint, params.outputMint);
+
+  let pumpError: string | undefined;
+  if (isPumpMint(tokenMint)) {
+    const pump = await getPumpBondingCurveQuote({
+      inputMint: params.inputMint,
+      outputMint: params.outputMint,
+      amountLamports: lamports,
+    });
+    if (pump.quote) {
+      return { quote: pump.quote, source: "pump_bonding_curve" };
+    }
+    pumpError = pump.error ?? "Pump bonding-curve quote mislukt";
+  }
+
   const jupiter = await getJupiterQuote({ ...params, amountLamports: lamports });
   if (jupiter.quote) {
     return { quote: jupiter.quote, source: "jupiter" };
   }
 
-  const tokenMint =
-    params.inputMint === "So11111111111111111111111111111111111111112"
-      ? params.outputMint
-      : params.inputMint;
-
-  const shouldTryPump =
-    isPumpMint(tokenMint) &&
-    (jupiter.error?.errorCode === "TOKEN_NOT_TRADABLE" ||
-      jupiter.error?.reason === "no_route");
-
-  if (!shouldTryPump) {
+  if (!isPumpMint(tokenMint)) {
     return jupiter;
   }
 
-  const pump = await getPumpBondingCurveQuote({
-    inputMint: params.inputMint,
-    outputMint: params.outputMint,
-    amountLamports: lamports,
-  });
-
-  if (pump.quote) {
-    return { quote: pump.quote, source: "pump_bonding_curve" };
-  }
-
-  const pumpMessage = pump.error ?? "Pump bonding-curve quote mislukt";
-  const graduated = pumpMessage.includes("afgestudeerd");
+  const graduated = (pumpError ?? "").includes("afgestudeerd");
 
   return {
     quote: null,
     error: {
       reason: graduated ? "pump_graduated" : "pump_no_data",
-      message: `Jupiter: ${jupiter.error?.message ?? "geen route"}. Pump: ${pumpMessage}`,
+      message: `Jupiter: ${jupiter.error?.message ?? "geen route"}. Pump: ${pumpError ?? "onbekend"}`,
       errorCode: jupiter.error?.errorCode,
       statusCode: jupiter.error?.statusCode,
     },

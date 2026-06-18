@@ -22,8 +22,24 @@ import type { ParsedSwap, Position } from "./types";
 import { getBotBalanceSol } from "./solana";
 import { getTokenMarketData } from "./token-data";
 
-/** Maximale price impact (%) op een buy-quote voordat we de trade als te illiquide skippen. */
-const MAX_BUY_PRICE_IMPACT_PCT = 10;
+function jupiterPriceImpactPct(quote: { priceImpactPct: string }): number {
+  return Number(quote.priceImpactPct) * 100;
+}
+
+function shouldSkipForPriceImpact(
+  quoteResult: { source?: QuoteSource; quote: { priceImpactPct: string } | null },
+  maxPct: number,
+): boolean {
+  if (maxPct <= 0) return false;
+  if (quoteResult.source === "pump_bonding_curve") return false;
+  if (!quoteResult.quote) return false;
+  const impact = jupiterPriceImpactPct(quoteResult.quote);
+  return Number.isFinite(impact) && impact > maxPct;
+}
+
+function priceImpactSkipMessage(impact: number, maxPct: number): string {
+  return `Price impact te hoog (${impact.toFixed(1)}% > ${maxPct}%) — te illiquide`;
+}
 
 export async function processSwap(swap: ParsedSwap): Promise<void> {
   // Dedup: cron én webhook kunnen dezelfde swap aanleveren. Sleutel op
@@ -235,11 +251,11 @@ async function handleCopyBuy(
     }
 
     const quote = quoteResult.quote;
-    const impact = Number(quote.priceImpactPct) * 100;
-    if (Number.isFinite(impact) && impact > MAX_BUY_PRICE_IMPACT_PCT) {
+    if (shouldSkipForPriceImpact(quoteResult, config.maxBuyPriceImpactPct)) {
+      const impact = jupiterPriceImpactPct(quote);
       await logSkip(
         swap,
-        `Price impact te hoog (${impact.toFixed(1)}% > ${MAX_BUY_PRICE_IMPACT_PCT}%) — te illiquide`,
+        priceImpactSkipMessage(impact, config.maxBuyPriceImpactPct),
       );
       return;
     }
@@ -278,11 +294,11 @@ async function handleCopyBuy(
       slippageBps: config.slippageBps,
     });
     if (preQuoteResult.quote) {
-      const impact = Number(preQuoteResult.quote.priceImpactPct) * 100;
-      if (Number.isFinite(impact) && impact > MAX_BUY_PRICE_IMPACT_PCT) {
+      if (shouldSkipForPriceImpact(preQuoteResult, config.maxBuyPriceImpactPct)) {
+        const impact = jupiterPriceImpactPct(preQuoteResult.quote);
         await logSkip(
           swap,
-          `Price impact te hoog (${impact.toFixed(1)}% > ${MAX_BUY_PRICE_IMPACT_PCT}%) — te illiquide`,
+          priceImpactSkipMessage(impact, config.maxBuyPriceImpactPct),
         );
         return;
       }
