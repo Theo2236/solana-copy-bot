@@ -49,13 +49,27 @@ export function SettingsPanel({
         ]
       : []),
     { label: "Max open posities", value: String(config.maxOpenPositions) },
-    { label: "Stop loss", value: `-${config.stopLossPct}%` },
+    {
+      label: "Home run modus",
+      value: config.homeRunMode
+        ? "Aan — geen SL/TP, exit via copy-sell"
+        : "Uit",
+    },
+    {
+      label: "Stop loss",
+      value:
+        config.homeRunMode || config.stopLossPct <= 0
+          ? "Uit"
+          : `-${config.stopLossPct}%`,
+    },
     {
       label: "Take profit",
       value:
-        config.takeProfitPct > 0
-          ? `+${config.takeProfitPct}%`
-          : "Uit (exit via copy-sell)",
+        config.homeRunMode
+          ? "Uit (home run)"
+          : config.takeProfitPct > 0
+            ? `+${config.takeProfitPct}%`
+            : "Uit (exit via copy-sell)",
     },
     {
       label: "Min liquiditeit",

@@ -97,8 +97,15 @@ function copySizeModeFromEnv(): BotConfig["copySizeMode"] {
   return raw === "fixed" ? "fixed" : "conviction";
 }
 
+/** Home run: laten lopen tot target verkoopt — geen automatische stop-loss. */
+export function isHomeRunMode(): boolean {
+  const raw = process.env.HOME_RUN_MODE?.trim().toLowerCase();
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
 export function getBotConfig(): BotConfig {
   const tradeSizeSol = Number(process.env.TRADE_SIZE_SOL ?? "0.05");
+  const homeRunMode = isHomeRunMode();
 
   return {
     tradeSizeSol,
@@ -107,9 +114,9 @@ export function getBotConfig(): BotConfig {
     minCopyTradeSol: Number(process.env.MIN_COPY_TRADE_SOL ?? "0.02"),
     maxCopyTradeSol: Number(process.env.MAX_COPY_TRADE_SOL ?? "1.0"),
     maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS ?? "3"),
-    stopLossPct: Number(process.env.STOP_LOSS_PCT ?? "30"),
+    stopLossPct: homeRunMode ? 0 : Number(process.env.STOP_LOSS_PCT ?? "30"),
     // 0 = uit — pump.fun is alles-of-niets; exit via target copy-sell (of SL).
-    takeProfitPct: Number(process.env.TAKE_PROFIT_PCT ?? "0"),
+    takeProfitPct: homeRunMode ? 0 : Number(process.env.TAKE_PROFIT_PCT ?? "0"),
     // Laag gehouden zodat verse pump.fun-memecoins (waar de target-wallets de
     // meeste winst maken) niet worden weggefilterd. De price-impact-guard op de
     // quote beschermt tegen écht illiquide tokens.
@@ -125,6 +132,7 @@ export function getBotConfig(): BotConfig {
     targetAutoDisableMaxLossSol: Number(
       process.env.TARGET_AUTO_DISABLE_MAX_LOSS_SOL ?? "-0.05",
     ),
+    homeRunMode,
     targets: DEFAULT_TARGETS.map((t) => ({ ...t })),
   };
 }

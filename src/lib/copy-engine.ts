@@ -21,6 +21,7 @@ import {
 import type { ParsedSwap, Position } from "./types";
 import { getBotBalanceSol } from "./solana";
 import { getTokenMarketData } from "./token-data";
+import { quoteLamportsToSol } from "./position-pnl";
 
 function jupiterPriceImpactPct(quote: { priceImpactPct: string }): number {
   return Number(quote.priceImpactPct) * 100;
@@ -122,7 +123,8 @@ function safeBigInt(value: string | undefined): bigint {
 function mergeBuy(
   existing: Position | undefined,
   swap: ParsedSwap,
-  tradeSol: number,
+  /** Werkelijke SOL-kost uit quote `inAmount`, niet de gevraagde tradegrootte. */
+  entrySolFromQuote: number,
   quantityRaw: string | undefined,
 ): Position {
   const now = new Date().toISOString();
@@ -130,7 +132,7 @@ function mergeBuy(
 
   if (existing) {
     const totalQty = safeBigInt(existing.quantity) + addQty;
-    const newEntrySol = existing.entrySol + tradeSol;
+    const newEntrySol = existing.entrySol + entrySolFromQuote;
     const qtyStr =
       existing.quantity || quantityRaw ? totalQty.toString() : undefined;
     const qtyNum = Number(totalQty);
@@ -148,8 +150,8 @@ function mergeBuy(
   return {
     id: createEventId(),
     mint: swap.mint,
-    entrySol: tradeSol,
-    entryPrice: qtyNum > 0 ? tradeSol / qtyNum : undefined,
+    entrySol: entrySolFromQuote,
+    entryPrice: qtyNum > 0 ? entrySolFromQuote / qtyNum : undefined,
     quantity: quantityRaw,
     openedAt: now,
     sourceWallet: swap.wallet,
@@ -260,7 +262,8 @@ async function handleCopyBuy(
       return;
     }
 
-    const merged = mergeBuy(existing, swap, tradeSol, quote.outAmount);
+    const entrySolFromQuote = quoteLamportsToSol(quote.inAmount);
+    const merged = mergeBuy(existing, swap, entrySolFromQuote, quote.outAmount);
     await upsertPosition(merged);
     await incrementTradesToday();
     const verb = averagedIn ? `Bijgekocht (#${merged.buyCount})` : "Zou kopen";
@@ -271,12 +274,13 @@ async function handleCopyBuy(
       type: "copy_buy",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `[DRY RUN] ${verb} ${tradeSol} SOL op ${swap.mint}${convictionNote}${sourceNote}`,
+      message: `[DRY RUN] ${verb} ${entrySolFromQuote.toFixed(4)} SOL op ${swap.mint}${convictionNote}${sourceNote}`,
       txSignature: swap.signature,
       metadata: {
         mode: "dry_run",
         quantity: merged.quantity ?? null,
         tradeSol,
+        entrySolFromQuote,
         buyCount: merged.buyCount,
         averagedIn,
         quoteSource: quoteResult.source ?? null,
@@ -310,7 +314,8 @@ async function handleCopyBuy(
       slippageBps: config.slippageBps,
     });
 
-    const merged = mergeBuy(existing, swap, tradeSol, result.quote.outAmount);
+    const entrySolFromQuote = quoteLamportsToSol(result.quote.inAmount);
+    const merged = mergeBuy(existing, swap, entrySolFromQuote, result.quote.outAmount);
     await upsertPosition(merged);
     await incrementTradesToday();
     const verb = averagedIn ? `Bijgekocht (#${merged.buyCount})` : "Gekocht";
@@ -321,10 +326,11 @@ async function handleCopyBuy(
       type: "copy_buy",
       wallet: swap.wallet,
       mint: swap.mint,
-      message: `${verb}: ${tradeSol} SOL → ${swap.mint}${convictionNote}${sourceNote}`,
+      message: `${verb}: ${entrySolFromQuote.toFixed(4)} SOL → ${swap.mint}${convictionNote}${sourceNote}`,
       txSignature: result.signature,
       metadata: {
         tradeSol,
+        entrySolFromQuote,
         buyCount: merged.buyCount,
         averagedIn,
         executionSource: result.source,
@@ -588,7 +594,7 @@ export async function checkOpenPositions(): Promise<void> {
     if (exitSol !== null && position.entrySol > 0) {
       const pnlPct = ((exitSol - position.entrySol) / position.entrySol) * 100;
 
-      if (pnlPct <= -config.stopLossPct) {
+      if (config.stopLossPct > 0 && pnlPct <= -config.stopLossPct) {
         await closePosition(position, "stop_loss", exitSol, pnlPct);
         continue;
       }
@@ -607,8 +613,9 @@ export async function checkOpenPositions(): Promise<void> {
         timestamp: new Date().toISOString(),
         type: "position_close",
         mint: position.mint,
-        message:
-          config.takeProfitPct > 0
+        message: config.homeRunMode
+          ? "Positie ouder dan 24u — home run modus: exit via target copy-sell of handmatig"
+          : config.takeProfitPct > 0
             ? `Positie ouder dan 24u — handmatige review aanbevolen (SL ${config.stopLossPct}% / TP ${config.takeProfitPct}%)`
             : `Positie ouder dan 24u — exit via target copy-sell (SL ${config.stopLossPct}%, geen take-profit)`,
       });
