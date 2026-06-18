@@ -36,6 +36,11 @@ export interface BotConfig {
   targetAutoDisableMinTrades: number;
   /** Targets met PnL onder deze drempel (SOL) worden uitgeschakeld. */
   targetAutoDisableMaxLossSol: number;
+  /**
+   * Home run: geen stop-loss/take-profit — exit alleen via target copy-sell of handmatig.
+   * Zet via env `HOME_RUN_MODE=true` (forceert stopLossPct en takeProfitPct naar 0).
+   */
+  homeRunMode: boolean;
   targets: TargetWallet[];
 }
 

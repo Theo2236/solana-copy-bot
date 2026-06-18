@@ -594,7 +594,7 @@ export async function checkOpenPositions(): Promise<void> {
     if (exitSol !== null && position.entrySol > 0) {
       const pnlPct = ((exitSol - position.entrySol) / position.entrySol) * 100;
 
-      if (pnlPct <= -config.stopLossPct) {
+      if (config.stopLossPct > 0 && pnlPct <= -config.stopLossPct) {
         await closePosition(position, "stop_loss", exitSol, pnlPct);
         continue;
       }
@@ -613,8 +613,9 @@ export async function checkOpenPositions(): Promise<void> {
         timestamp: new Date().toISOString(),
         type: "position_close",
         mint: position.mint,
-        message:
-          config.takeProfitPct > 0
+        message: config.homeRunMode
+          ? "Positie ouder dan 24u — home run modus: exit via target copy-sell of handmatig"
+          : config.takeProfitPct > 0
             ? `Positie ouder dan 24u — handmatige review aanbevolen (SL ${config.stopLossPct}% / TP ${config.takeProfitPct}%)`
             : `Positie ouder dan 24u — exit via target copy-sell (SL ${config.stopLossPct}%, geen take-profit)`,
       });

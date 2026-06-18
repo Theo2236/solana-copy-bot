@@ -67,10 +67,15 @@ export function BotStatusCard({ stats, config, botWallet }: BotStatusCardProps) 
           )}
           <li>Max posities: {config.maxOpenPositions}</li>
           <li>
-            SL: -{config.stopLossPct}%
-            {config.takeProfitPct > 0
-              ? ` · TP: +${config.takeProfitPct}%`
-              : " · geen take-profit (copy-sell)"}
+            {config.homeRunMode
+              ? "Home run: geen SL/TP — exit via copy-sell of handmatig"
+              : config.stopLossPct > 0
+                ? `SL: -${config.stopLossPct}%${
+                    config.takeProfitPct > 0
+                      ? ` · TP: +${config.takeProfitPct}%`
+                      : " · geen take-profit (copy-sell)"
+                  }`
+                : "Geen stop-loss — exit via copy-sell"}
           </li>
         </ul>
       </div>
