@@ -6,6 +6,7 @@ import {
   computeTargetPerformance,
 } from "@/lib/derived-stats";
 import { computeHealth } from "@/lib/health";
+import { computeOpenPositionMarks } from "@/lib/position-marks";
 import { getSolPriceEur } from "@/lib/price";
 import {
   getPositions,
@@ -38,11 +39,17 @@ export async function GET(request: Request) {
     getTargets(),
   ]);
 
+  const openPositionMarks = await computeOpenPositionMarks(
+    positions,
+    config.slippageBps,
+  );
+
   const { targets: _omitTargets, ...dashboardConfig } = config;
 
   const data: DashboardData = {
     stats,
     positions,
+    openPositionMarks,
     recentEvents,
     targets,
     config: dashboardConfig,

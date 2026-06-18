@@ -390,6 +390,7 @@ export function Dashboard() {
   const {
     stats,
     positions,
+    openPositionMarks,
     recentEvents,
     targets,
     config,
@@ -458,6 +459,7 @@ export function Dashboard() {
           <>
             <OpenPositions
               positions={positions}
+              marks={openPositionMarks}
               targets={targets}
               solPriceEur={solPriceEur}
             />

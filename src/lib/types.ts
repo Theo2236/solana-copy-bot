@@ -137,6 +137,17 @@ export interface PnlPoint {
   trades: number;
 }
 
+/** Live mark-to-market voor een open positie (via sell-quote). */
+export interface OpenPositionMark {
+  positionId: string;
+  mint: string;
+  currentValueSol: number | null;
+  pnlSol: number | null;
+  pnlPct: number | null;
+  quoteSource?: "jupiter" | "pump_bonding_curve";
+  updatedAt?: string;
+}
+
 export interface HealthStatus {
   redisConfigured: boolean;
   heliusConfigured: boolean;
@@ -151,6 +162,7 @@ export interface HealthStatus {
 export interface DashboardData {
   stats: BotStats;
   positions: Position[];
+  openPositionMarks: OpenPositionMark[];
   recentEvents: TradeEvent[];
   targets: TargetWallet[];
   config: DashboardConfig;

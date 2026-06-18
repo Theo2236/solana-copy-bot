@@ -14,6 +14,15 @@ export function solscanTx(signature: string): string {
   return `${BASE}/tx/${signature}`;
 }
 
+/** pump.fun coin-pagina (mints eindigen op "pump"). */
+export function pumpFunCoinUrl(mint: string): string {
+  return `https://pump.fun/coin/${mint}`;
+}
+
+export function isPumpFunMint(mint: string): boolean {
+  return mint.toLowerCase().endsWith("pump");
+}
+
 /** Kort een adres of signature af tot `abcd…wxyz`. */
 export function shortenAddress(value: string, chars = 4): string {
   if (value.length <= chars * 2 + 1) return value;

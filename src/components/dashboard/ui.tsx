@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import {
+  isPumpFunMint,
+  pumpFunCoinUrl,
   solscanAddress,
   solscanToken,
   solscanTx,
@@ -39,14 +41,6 @@ export function CopyButton({
   );
 }
 
-type ExplorerKind = "address" | "token" | "tx";
-
-function explorerHref(kind: ExplorerKind, value: string): string {
-  if (kind === "token") return solscanToken(value);
-  if (kind === "tx") return solscanTx(value);
-  return solscanAddress(value);
-}
-
 /** Afgekort adres als Solscan-link met kopieerknop ernaast. */
 export function ExplorerLink({
   value,
@@ -71,6 +65,30 @@ export function ExplorerLink({
       </a>
       {withCopy && <CopyButton value={value} label="kopieer" />}
     </span>
+  );
+}
+
+type ExplorerKind = "address" | "token" | "tx";
+
+function explorerHref(kind: ExplorerKind, value: string): string {
+  if (kind === "token") return solscanToken(value);
+  if (kind === "tx") return solscanTx(value);
+  return solscanAddress(value);
+}
+
+/** Externe link naar pump.fun voor bonding-curve tokens. */
+export function PumpFunLink({ mint }: { mint: string }) {
+  if (!isPumpFunMint(mint)) return null;
+
+  return (
+    <a
+      href={pumpFunCoinUrl(mint)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center rounded-full bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-medium text-fuchsia-300 underline-offset-2 hover:underline"
+    >
+      pump.fun
+    </a>
   );
 }
 
