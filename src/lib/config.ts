@@ -105,10 +105,11 @@ export function getBotConfig(): BotConfig {
     copySizeMode: copySizeModeFromEnv(),
     referenceConvictionPct: Number(process.env.COPY_REFERENCE_CONVICTION_PCT ?? "0.1"),
     minCopyTradeSol: Number(process.env.MIN_COPY_TRADE_SOL ?? "0.02"),
-    maxCopyTradeSol: Number(process.env.MAX_COPY_TRADE_SOL ?? "1.0"),
-    maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS ?? "3"),
-    stopLossPct: Number(process.env.STOP_LOSS_PCT ?? "30"),
-    // 0 = uit — pump.fun is alles-of-niets; exit via target copy-sell (of SL).
+    maxCopyTradeSol: Number(process.env.MAX_COPY_TRADE_SOL ?? "0.08"),
+    maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS ?? "2"),
+    // 0 = uit — verlies-exit alleen via target copy-sell (homerun-strategie).
+    stopLossPct: Number(process.env.STOP_LOSS_PCT ?? "0"),
+    // 0 = uit — winst via homerun tiers + target copy-sell.
     takeProfitPct: Number(process.env.TAKE_PROFIT_PCT ?? "0"),
     // Laag gehouden zodat verse pump.fun-memecoins (waar de target-wallets de
     // meeste winst maken) niet worden weggefilterd. De price-impact-guard op de
@@ -124,6 +125,21 @@ export function getBotConfig(): BotConfig {
     ),
     targetAutoDisableMaxLossSol: Number(
       process.env.TARGET_AUTO_DISABLE_MAX_LOSS_SOL ?? "-0.05",
+    ),
+    minTargetConvictionPct: Number(
+      process.env.MIN_TARGET_CONVICTION_PCT ?? "0.02",
+    ),
+    homerunTiersEnabled: process.env.HOMERUN_TIERS_ENABLED !== "false",
+    homerunTier1PnlPct: Number(process.env.HOMERUN_TIER1_PNL_PCT ?? "100"),
+    homerunTier1SellFraction: Number(
+      process.env.HOMERUN_TIER1_SELL_FRACTION ?? "0.5",
+    ),
+    homerunTier2PnlPct: Number(process.env.HOMERUN_TIER2_PNL_PCT ?? "400"),
+    homerunTier2SellOriginalFraction: Number(
+      process.env.HOMERUN_TIER2_SELL_ORIGINAL_FRACTION ?? "0.25",
+    ),
+    homerunTrailingStopPct: Number(
+      process.env.HOMERUN_TRAILING_STOP_PCT ?? "20",
     ),
     targets: DEFAULT_TARGETS.map((t) => ({ ...t })),
   };

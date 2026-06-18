@@ -36,6 +36,17 @@ export interface BotConfig {
   targetAutoDisableMinTrades: number;
   /** Targets met PnL onder deze drempel (SOL) worden uitgeschakeld. */
   targetAutoDisableMaxLossSol: number;
+  /** Min. % wallet-inzet van target om buy te kopiëren (0 = uit). */
+  minTargetConvictionPct: number;
+  /** Gelaagde winst-exits (homerun); verlies-exit alleen via target copy-sell. */
+  homerunTiersEnabled: boolean;
+  homerunTier1PnlPct: number;
+  homerunTier1SellFraction: number;
+  homerunTier2PnlPct: number;
+  /** Fractie van oorspronkelijke positie bij tier 2 (niet van restant). */
+  homerunTier2SellOriginalFraction: number;
+  /** Trailing stop op moon bag na tier 1 (0 = uit). */
+  homerunTrailingStopPct: number;
   targets: TargetWallet[];
 }
 
@@ -65,6 +76,12 @@ export interface Position {
   realizedPnlSol?: number;
   lastBuyAt?: string;
   lastSellAt?: string;
+  /** Homerun tier 1 (+100%): 50% verkocht, inleg terug. */
+  homerunTier1Done?: boolean;
+  /** Homerun tier 2 (+400%): extra winst vastgezet. */
+  homerunTier2Done?: boolean;
+  /** Hoogste gemeten PnL% voor trailing stop op moon bag. */
+  peakPnlPct?: number;
 }
 
 export interface TradeEvent {

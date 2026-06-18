@@ -21,6 +21,11 @@ import {
 import type { ParsedSwap, Position } from "./types";
 import { getBotBalanceSol } from "./solana";
 import { getTokenMarketData } from "./token-data";
+import {
+  markHomerunTierDone,
+  planHomerunExit,
+  updatePeakPnl,
+} from "./homerun-exits";
 
 function jupiterPriceImpactPct(quote: { priceImpactPct: string }): number {
   return Number(quote.priceImpactPct) * 100;
@@ -208,6 +213,18 @@ async function handleCopyBuy(
 
   if (!Number.isFinite(tradeSol) || tradeSol <= 0) {
     await logSkip(swap, "Ongeldige tradegrootte (config/sizing)");
+    return;
+  }
+
+  if (
+    config.minTargetConvictionPct > 0 &&
+    sizing.convictionPct !== null &&
+    sizing.convictionPct < config.minTargetConvictionPct
+  ) {
+    await logSkip(
+      swap,
+      `Target-inzet te laag (${formatConvictionPct(sizing.convictionPct)} < ${formatConvictionPct(config.minTargetConvictionPct)})`,
+    );
     return;
   }
 
@@ -587,14 +604,38 @@ export async function checkOpenPositions(): Promise<void> {
 
     if (exitSol !== null && position.entrySol > 0) {
       const pnlPct = ((exitSol - position.entrySol) / position.entrySol) * 100;
+      updatePeakPnl(position, pnlPct);
 
-      if (pnlPct <= -config.stopLossPct) {
+      // Verlies: nooit zelf uithalen — alleen via target copy-sell.
+      if (config.stopLossPct > 0 && pnlPct <= -config.stopLossPct) {
         await closePosition(position, "stop_loss", exitSol, pnlPct);
         continue;
       }
+
+      const homerunAction = planHomerunExit(position, pnlPct, config);
+      if (homerunAction.kind !== "none") {
+        const sold = await sellPartialFromPosition(
+          position,
+          homerunAction.sellFractionOfRemaining,
+          {
+            label: homerunAction.label,
+            reason: "take_profit",
+          },
+        );
+        if (sold) {
+          markHomerunTierDone(position, homerunAction);
+          await upsertPosition(position);
+        }
+        continue;
+      }
+
       if (config.takeProfitPct > 0 && pnlPct >= config.takeProfitPct) {
         await closePosition(position, "take_profit", exitSol, pnlPct);
         continue;
+      }
+
+      if (position.peakPnlPct !== undefined) {
+        await upsertPosition(position);
       }
     }
 
@@ -607,12 +648,135 @@ export async function checkOpenPositions(): Promise<void> {
         timestamp: new Date().toISOString(),
         type: "position_close",
         mint: position.mint,
-        message:
-          config.takeProfitPct > 0
-            ? `Positie ouder dan 24u — handmatige review aanbevolen (SL ${config.stopLossPct}% / TP ${config.takeProfitPct}%)`
-            : `Positie ouder dan 24u — exit via target copy-sell (SL ${config.stopLossPct}%, geen take-profit)`,
+        message: config.homerunTiersEnabled
+          ? `Positie ouder dan 24u — verlies via target copy-sell; winst via homerun tiers`
+          : `Positie ouder dan 24u — exit via target copy-sell`,
       });
     }
+  }
+}
+
+/**
+ * Verkoopt een fractie van de resterende positie (homerun tiers / trailing stop).
+ */
+async function sellPartialFromPosition(
+  position: Position,
+  sellFractionOfRemaining: number,
+  context: { label: string; reason: "take_profit" },
+): Promise<boolean> {
+  const remaining = safeBigInt(position.quantity);
+  if (remaining <= 0n) return false;
+
+  const sellFraction = Math.min(1, Math.max(0, sellFractionOfRemaining));
+  const sellQty =
+    (remaining * BigInt(Math.round(sellFraction * 1_000_000))) / 1_000_000n;
+  const sellAll =
+    sellFraction >= 0.999 || sellQty <= 0n || sellQty >= remaining;
+
+  if (sellAll) {
+    const exitSol = await quoteSellSol(position);
+    if (exitSol === null) {
+      await addEvent({
+        id: createEventId(),
+        timestamp: new Date().toISOString(),
+        type: "error",
+        mint: position.mint,
+        message: `${context.label} — geen sell-quote beschikbaar`,
+        metadata: { reason: context.reason },
+      });
+      return false;
+    }
+    const pnlSol = exitSol - position.entrySol;
+    await finalizeClose(position, context.reason, exitSol, pnlSol);
+    await recordTradeResult(pnlSol);
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "position_close",
+      mint: position.mint,
+      message: isDryRun()
+        ? `[DRY RUN] ${context.label} (PnL ${pnlSol.toFixed(4)} SOL)`
+        : `${context.label} (PnL ${pnlSol.toFixed(4)} SOL)`,
+      metadata: { reason: context.reason, homerun: true },
+    });
+    return true;
+  }
+
+  const exitPortion = await quoteSellSolForAmount(position.mint, sellQty);
+  const portionEntrySol =
+    position.entrySol * (Number(sellQty) / Number(remaining));
+  if (exitPortion === null) {
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "error",
+      mint: position.mint,
+      message: `${context.label} — gedeeltelijke sell-quote mislukt`,
+      metadata: { reason: context.reason, partial: true },
+    });
+    return false;
+  }
+
+  const pnlSol = exitPortion - portionEntrySol;
+
+  if (isDryRun()) {
+    applyPartialSell(position, remaining - sellQty, portionEntrySol, pnlSol);
+    await recordTradeResult(pnlSol);
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "copy_sell",
+      mint: position.mint,
+      message: `[DRY RUN] ${context.label} — PnL ${pnlSol.toFixed(4)} SOL`,
+      metadata: {
+        mode: "dry_run",
+        partial: true,
+        sellFraction,
+        reason: context.reason,
+        homerun: true,
+      },
+    });
+    return true;
+  }
+
+  if (!position.quantity) return false;
+
+  try {
+    const result = await executeSellTokenForSol({
+      mint: position.mint,
+      tokenAmount: sellQty.toString(),
+      slippageBps: getBotConfig().slippageBps,
+    });
+    const exitSol = Number(result.quote.outAmount) / LAMPORTS_PER_SOL;
+    const livePnlSol = exitSol - portionEntrySol;
+    applyPartialSell(position, remaining - sellQty, portionEntrySol, livePnlSol);
+    await recordTradeResult(livePnlSol);
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "copy_sell",
+      mint: position.mint,
+      message: `${context.label} — PnL ${livePnlSol.toFixed(4)} SOL`,
+      txSignature: result.signature,
+      metadata: {
+        partial: true,
+        sellFraction,
+        reason: context.reason,
+        homerun: true,
+        executionSource: result.source,
+      },
+    });
+    return true;
+  } catch (error) {
+    await addEvent({
+      id: createEventId(),
+      timestamp: new Date().toISOString(),
+      type: "error",
+      mint: position.mint,
+      message: `${context.label} mislukt: ${error instanceof Error ? error.message : "onbekend"}`,
+      metadata: { reason: context.reason },
+    });
+    return false;
   }
 }
 

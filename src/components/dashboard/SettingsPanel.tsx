@@ -49,7 +49,26 @@ export function SettingsPanel({
         ]
       : []),
     { label: "Max open posities", value: String(config.maxOpenPositions) },
-    { label: "Stop loss", value: `-${config.stopLossPct}%` },
+    {
+      label: "Stop loss",
+      value:
+        config.stopLossPct > 0
+          ? `-${config.stopLossPct}% (bot)`
+          : "Uit — alleen via target copy-sell",
+    },
+    {
+      label: "Min target-inzet",
+      value:
+        config.minTargetConvictionPct > 0
+          ? `≥ ${(config.minTargetConvictionPct * 100).toFixed(1)}% wallet`
+          : "Uit",
+    },
+    {
+      label: "Homerun tiers",
+      value: config.homerunTiersEnabled
+        ? `+${config.homerunTier1PnlPct}% → ${(config.homerunTier1SellFraction * 100).toFixed(0)}% uit · +${config.homerunTier2PnlPct}% → extra · trail ${config.homerunTrailingStopPct}%`
+        : "Uit",
+    },
     {
       label: "Take profit",
       value:

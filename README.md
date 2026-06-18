@@ -119,10 +119,12 @@ Handmatig toegevoegde wallets blijven behouden bij de dagelijkse `refresh-wallet
 
 ## Risico-instellingen (defaults)
 
-- 0.05 SOL per trade (conviction-modus schaalt met wallet-inzet target)
-- Max 3 open posities
-- Stop-loss -30%
-- Take-profit **uit** (exit via target copy-sell)
+- 0.03 SOL basis per trade (conviction-modus schaalt met wallet-inzet target)
+- Copy range 0.02–0.08 SOL
+- Max 2 open posities
+- **Stop-loss uit** — verlies-exit alleen via target copy-sell
+- **Homerun tiers**: +100% → 50% uit (inleg terug), +400% → extra 25%, moon bag met 20% trailing stop
+- Min target-inzet 2% wallet (filtert ruis-trades)
 - Min liquiditeit $2.000 (Dexscreener; verse pump-tokens met $0 worden doorgelaten)
 - 300 bps slippage
 - Auto-disable targets: ≥3 gesloten trades én PnL < -0.05 SOL

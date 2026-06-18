@@ -67,11 +67,25 @@ export function BotStatusCard({ stats, config, botWallet }: BotStatusCardProps) 
           )}
           <li>Max posities: {config.maxOpenPositions}</li>
           <li>
-            SL: -{config.stopLossPct}%
-            {config.takeProfitPct > 0
-              ? ` · TP: +${config.takeProfitPct}%`
-              : " · geen take-profit (copy-sell)"}
+            Verlies-exit:{" "}
+            {config.stopLossPct > 0
+              ? `bot SL -${config.stopLossPct}%`
+              : "alleen target copy-sell"}
           </li>
+          <li>
+            Winst-exit:{" "}
+            {config.homerunTiersEnabled
+              ? `homerun tiers (+${config.homerunTier1PnlPct}% / +${config.homerunTier2PnlPct}%)`
+              : config.takeProfitPct > 0
+                ? `TP +${config.takeProfitPct}%`
+                : "copy-sell"}
+          </li>
+          {config.minTargetConvictionPct > 0 && (
+            <li>
+              Min target-inzet:{" "}
+              {(config.minTargetConvictionPct * 100).toFixed(1)}% wallet
+            </li>
+          )}
         </ul>
       </div>
     </div>
