@@ -43,7 +43,8 @@ Kopieer `.env.example` naar `.env.local` en vul in:
 | `UPSTASH_REDIS_REST_URL` | Ja (prod) | Persistente state |
 | `UPSTASH_REDIS_REST_TOKEN` | Ja (prod) | Redis token |
 | `CRON_SECRET` | Ja (prod) | Beveiligt cron endpoints |
-| `DASHBOARD_PASSWORD` | Aanbevolen | Dashboard login |
+| `DASHBOARD_PASSWORD` | Ja (prod) | Dashboard login |
+| `HELIUS_WEBHOOK_SECRET` | Ja (prod) | Beveiligt Helius webhook |
 | `BOT_WALLET_PRIVATE_KEY` | Live only | Bot wallet voor swaps |
 | `BOT_MODE` | Nee | `dry_run` (default) of `live` |
 
@@ -86,8 +87,9 @@ Of koppel de GitHub repo in het Vercel dashboard.
 Verse pump.fun-tokens (eindigen op `pump`) worden vaak nog niet door Jupiter gerouteerd. De bot:
 
 1. Probeert eerst **Jupiter** (lite-api)
-2. Valt terug op **pump.fun bonding curve** via `@pump-fun/pump-sdk` voor buys/sells op de curve
-3. Na graduation (token verlaat bonding curve) gaat alles via Jupiter
+2. Valt terug op **pump.fun bonding curve** via de pump.fun frontend API (`pump-quote.ts`) voor quotes
+3. Voert live pump-trades uit via **PumpPortal** (`pump-swap.ts`)
+4. Na graduation (token verlaat bonding curve) gaat alles via Jupiter
 
 Dit werkt identiek in dry-run (quote) en live (on-chain executie).
 
@@ -119,7 +121,7 @@ Handmatig toegevoegde wallets blijven behouden bij de dagelijkse `refresh-wallet
 
 ## Risico-instellingen (defaults)
 
-- 0.03 SOL basis per trade (conviction-modus schaalt met wallet-inzet target)
+- 0.05 SOL basis per trade (conviction-modus schaalt met wallet-inzet target)
 - Copy range 0.02–0.08 SOL
 - Max 2 open posities
 - **Stop-loss uit** — verlies-exit alleen via target copy-sell
@@ -147,7 +149,17 @@ Handmatig toegevoegde wallets blijven behouden bij de dagelijkse `refresh-wallet
 - Verwacht mogelijk verlies van €20–50 bij €100 budget
 - Gebruik nooit je hoofd-wallet als bot wallet
 - Start altijd in `dry_run` modus
-- Phantom MCP werkt **niet** op Vercel — de bot gebruikt Jupiter + pump.fun SDK + eigen wallet
+- Phantom MCP werkt **niet** op Vercel — de bot gebruikt Jupiter + PumpPortal + eigen wallet
+
+## Kwaliteit
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+CI draait lint, tests en build op elke PR via GitHub Actions.
 
 Zie ook [docs/HANDOFF.md](docs/HANDOFF.md) voor overzetten naar een andere PC.
 

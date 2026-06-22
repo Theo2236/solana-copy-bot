@@ -29,8 +29,21 @@ const SIGNATURE_TTL_SECONDS = 60 * 60 * 24 * 7;
 function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
+  if (!url || !token) {
+    warnRedisFallbackOnce();
+    return null;
+  }
   return new Redis({ url, token });
+}
+
+let redisFallbackWarned = false;
+
+function warnRedisFallbackOnce(): void {
+  if (redisFallbackWarned) return;
+  redisFallbackWarned = true;
+  console.warn(
+    "[store] UPSTASH_REDIS niet geconfigureerd — in-memory fallback (state niet persistent)",
+  );
 }
 
 /** Upstash deserializes JSON automatically — values may already be objects. */

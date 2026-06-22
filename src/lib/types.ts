@@ -170,6 +170,9 @@ export interface HealthStatus {
   heliusConfigured: boolean;
   botWalletConfigured: boolean;
   webhookSecretConfigured: boolean;
+  cronSecretConfigured: boolean;
+  dashboardPasswordConfigured: boolean;
+  authWarnings: string[];
   mode: "live" | "dry_run";
   lastEventAt?: string;
   minutesSinceLastEvent: number | null;

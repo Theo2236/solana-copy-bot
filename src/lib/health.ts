@@ -1,3 +1,5 @@
+import { getAuthConfigWarnings } from "./auth";
+import { getCronSecret, getDashboardPassword } from "./config";
 import { getBotPublicKey } from "./solana";
 import type { HealthStatus } from "./types";
 
@@ -12,6 +14,9 @@ export function computeHealth(lastEventAt?: string): HealthStatus {
   const heliusConfigured = Boolean(process.env.HELIUS_API_KEY);
   const botWalletConfigured = Boolean(getBotPublicKey());
   const webhookSecretConfigured = Boolean(process.env.HELIUS_WEBHOOK_SECRET);
+  const cronSecretConfigured = Boolean(getCronSecret());
+  const dashboardPasswordConfigured = Boolean(getDashboardPassword());
+  const authWarnings = getAuthConfigWarnings();
   const mode = process.env.BOT_MODE === "live" ? "live" : "dry_run";
 
   let minutesSinceLastEvent: number | null = null;
@@ -31,6 +36,9 @@ export function computeHealth(lastEventAt?: string): HealthStatus {
     heliusConfigured,
     botWalletConfigured,
     webhookSecretConfigured,
+    cronSecretConfigured,
+    dashboardPasswordConfigured,
+    authWarnings,
     mode,
     lastEventAt,
     minutesSinceLastEvent,

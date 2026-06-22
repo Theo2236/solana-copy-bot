@@ -1,4 +1,5 @@
 import { isAuthorizedDashboard } from "@/lib/auth";
+import { withApiHandler } from "@/lib/api-handler";
 import { getPositions } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -27,24 +28,26 @@ function csvCell(value: unknown): string {
 }
 
 export async function GET(request: Request) {
-  if (!isAuthorizedDashboard(request)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  return withApiHandler(async () => {
+    if (!isAuthorizedDashboard(request)) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const positions = await getPositions();
-  const header = COLUMNS.join(",");
-  const lines = positions.map((position) =>
-    COLUMNS.map((column) => csvCell((position as unknown as Record<string, unknown>)[column])).join(
-      ",",
-    ),
-  );
-  const csv = [header, ...lines].join("\n");
+    const positions = await getPositions();
+    const header = COLUMNS.join(",");
+    const lines = positions.map((position) =>
+      COLUMNS.map((column) =>
+        csvCell((position as unknown as Record<string, unknown>)[column]),
+      ).join(","),
+    );
+    const csv = [header, ...lines].join("\n");
 
-  const date = new Date().toISOString().slice(0, 10);
-  return new Response(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="positions-${date}.csv"`,
-    },
+    const date = new Date().toISOString().slice(0, 10);
+    return new Response(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="positions-${date}.csv"`,
+      },
+    });
   });
 }

@@ -50,7 +50,26 @@ export function SystemHealth({ health }: { health: HealthStatus }) {
           label="Webhook secret"
           ok={health.webhookSecretConfigured}
         />
+        <StatusRow
+          label="Cron secret"
+          ok={health.cronSecretConfigured}
+        />
+        <StatusRow
+          label="Dashboard wachtwoord"
+          ok={health.dashboardPasswordConfigured}
+        />
       </div>
+
+      {health.authWarnings.length > 0 && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-xs text-red-400">
+          <p className="font-medium text-red-300">Auth-configuratie</p>
+          <ul className="mt-2 list-inside list-disc space-y-1">
+            {health.authWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div
         className={`mt-4 rounded-xl border p-4 text-sm ${
