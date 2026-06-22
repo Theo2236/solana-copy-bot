@@ -53,7 +53,6 @@ export const DEFAULT_TARGETS = [
 ] as const;
 
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
-export const WRAPPED_SOL_MINT = SOL_MINT;
 
 export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";

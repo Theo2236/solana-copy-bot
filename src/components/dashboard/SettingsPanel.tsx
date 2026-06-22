@@ -10,6 +10,7 @@ interface SettingsPanelProps {
   onWebhook: () => void;
   actionLoading: boolean;
   botEnabled: boolean;
+  webhookError?: string | null;
 }
 
 export function SettingsPanel({
@@ -19,6 +20,7 @@ export function SettingsPanel({
   onWebhook,
   actionLoading,
   botEnabled,
+  webhookError,
 }: SettingsPanelProps) {
   const rows: { label: string; value: string; badge?: string }[] = [
     {
@@ -167,6 +169,11 @@ export function SettingsPanel({
             Helius webhook registreren
           </button>
         </div>
+        {webhookError && (
+          <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+            Webhook sync fout: {webhookError}
+          </p>
+        )}
       </div>
     </div>
   );

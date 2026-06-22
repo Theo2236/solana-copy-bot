@@ -41,5 +41,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-.env*
+# cursor local state
+.cursor/hooks/
+
+# local exports
+stats-export.json

@@ -81,17 +81,6 @@ async function signAndSendPumpTransaction(
   return sendSignedVersionedTransaction(tx);
 }
 
-export async function isPumpBondingCurveActive(mint: string): Promise<boolean> {
-  if (!isPumpMint(mint)) return false;
-  const quote = await getPumpBondingCurveQuote({
-    inputMint: "So11111111111111111111111111111111111111112",
-    outputMint: mint,
-    amountLamports: 10_000_000,
-  });
-  if (!quote.quote) return false;
-  return !quote.error?.includes("afgestudeerd");
-}
-
 /**
  * Live buy op pump.fun via PumpPortal (bouwt + signeert bonding-curve tx).
  * Fallback-route wanneer Jupiter geen route heeft voor verse pump-mints.

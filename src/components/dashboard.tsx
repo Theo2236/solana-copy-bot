@@ -27,15 +27,20 @@ type Feedback = { tone: "ok" | "error"; message: string };
 export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [botWallet, setBotWallet] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(
+    () => Boolean(getStoredDashboardPassword()),
+  );
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(
+    () => Boolean(getStoredDashboardPassword()),
+  );
   const [passwordInput, setPasswordInput] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("overview");
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [webhookError, setWebhookError] = useState<string | null>(null);
   const [busyTarget, setBusyTarget] = useState<string | null>(null);
   const [addBusy, setAddBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -115,13 +120,11 @@ export function Dashboard() {
   }
 
   useEffect(() => {
-    if (getStoredDashboardPassword()) {
-      setAuthenticated(true);
-      fetchStats();
-    } else {
-      setLoading(false);
-    }
-  }, [fetchStats]);
+    if (!authenticated) return;
+    queueMicrotask(() => {
+      void fetchStats();
+    });
+  }, [authenticated, fetchStats]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -209,6 +212,7 @@ export function Dashboard() {
       if (!response.ok) {
         throw new Error(json.error ?? "Webhook setup mislukt");
       }
+      setWebhookError(null);
       setFeedback({ tone: "ok", message: "Webhook geregistreerd" });
       await fetchStats();
     } catch (err) {
@@ -232,11 +236,23 @@ export function Dashboard() {
           body: JSON.stringify({ address, enabled }),
         }),
       );
+      const json = (await response.json()) as {
+        webhookError?: string | null;
+      };
       if (!response.ok) throw new Error("Target bijwerken mislukt");
-      setFeedback({
-        tone: "ok",
-        message: enabled ? "Target ingeschakeld" : "Target uitgeschakeld",
-      });
+      if (json.webhookError) {
+        setWebhookError(json.webhookError);
+        setFeedback({
+          tone: "error",
+          message: `Target bijgewerkt, maar webhook sync mislukt: ${json.webhookError}`,
+        });
+      } else {
+        setWebhookError(null);
+        setFeedback({
+          tone: "ok",
+          message: enabled ? "Target ingeschakeld" : "Target uitgeschakeld",
+        });
+      }
       await fetchStats();
     } catch (err) {
       setFeedback({
@@ -259,15 +275,28 @@ export function Dashboard() {
           body: JSON.stringify({ address, label, requireActivity: false }),
         }),
       );
-      const json = await response.json();
+      const json = (await response.json()) as {
+        error?: string;
+        activity?: { swapCount?: number };
+        webhookError?: string | null;
+      };
       if (!response.ok) {
         throw new Error(json.error ?? "Wallet toevoegen mislukt");
       }
       const swaps = json.activity?.swapCount ?? 0;
-      setFeedback({
-        tone: "ok",
-        message: `Wallet toegevoegd (${swaps} recente swaps gevonden)`,
-      });
+      if (json.webhookError) {
+        setWebhookError(json.webhookError);
+        setFeedback({
+          tone: "error",
+          message: `Wallet toegevoegd (${swaps} swaps), webhook sync mislukt: ${json.webhookError}`,
+        });
+      } else {
+        setWebhookError(null);
+        setFeedback({
+          tone: "ok",
+          message: `Wallet toegevoegd (${swaps} recente swaps gevonden)`,
+        });
+      }
       await fetchStats();
     } catch (err) {
       setFeedback({
@@ -290,8 +319,18 @@ export function Dashboard() {
           body: JSON.stringify({ address }),
         }),
       );
+      const json = (await response.json()) as { webhookError?: string | null };
       if (!response.ok) throw new Error("Verwijderen mislukt");
-      setFeedback({ tone: "ok", message: "Wallet verwijderd" });
+      if (json.webhookError) {
+        setWebhookError(json.webhookError);
+        setFeedback({
+          tone: "error",
+          message: `Wallet verwijderd, webhook sync mislukt: ${json.webhookError}`,
+        });
+      } else {
+        setWebhookError(null);
+        setFeedback({ tone: "ok", message: "Wallet verwijderd" });
+      }
       await fetchStats();
     } catch (err) {
       setFeedback({
@@ -556,6 +595,7 @@ export function Dashboard() {
               onWebhook={setupWebhook}
               actionLoading={actionLoading}
               botEnabled={stats.botEnabled}
+              webhookError={webhookError}
             />
           </>
         )}

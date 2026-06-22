@@ -1,4 +1,5 @@
 import { isAuthorizedDashboard } from "@/lib/auth";
+import { withApiHandler } from "@/lib/api-handler";
 import { runTargetPoll } from "@/lib/poll";
 import { addEvent, createEventId } from "@/lib/store";
 
@@ -8,11 +9,11 @@ export const dynamic = "force-dynamic";
 
 /** Handmatige poll vanuit het dashboard (Refresh-knop). */
 export async function POST(request: Request) {
-  if (!isAuthorizedDashboard(request)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  return withApiHandler(async () => {
+    if (!isAuthorizedDashboard(request)) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  try {
     const { processed, targets, disabledTargets } = await runTargetPoll(8);
 
     await addEvent({
@@ -26,14 +27,5 @@ export async function POST(request: Request) {
     });
 
     return Response.json({ ok: true, processed, targets, disabledTargets });
-  } catch (error) {
-    console.error("Manual poll error", error);
-    return Response.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Poll mislukt",
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
