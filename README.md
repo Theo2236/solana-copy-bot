@@ -39,10 +39,28 @@ Open [http://localhost:3000](http://localhost:3000), upload een foto en wacht op
 
 ## Deploy op Vercel
 
-1. Push naar GitHub
-2. Importeer in Vercel
-3. Voeg de environment variables toe
-4. Deploy
+**Live (productie):** https://solana-copy-bot.vercel.app
+
+**Preview:** elke branch krijgt automatisch een Vercel preview URL.
+
+### Environment variables (verplicht voor scans)
+
+Voeg deze toe in [Vercel Project Settings → Environment Variables](https://vercel.com/theo2236s-projects/solana-copy-bot/settings/environment-variables):
+
+| Variabele | Beschrijving |
+|-----------|--------------|
+| `GEMINI_API_KEY` | Vision AI ([Google AI Studio](https://aistudio.google.com/apikey)) |
+| `POKEMON_TCG_API_KEY` | Prijsdata ([dev.pokemontcg.io](https://dev.pokemontcg.io/)) |
+
+### Nieuwe GitHub repository
+
+De cloud agent kan geen nieuwe repo aanmaken (beperkte GitHub-rechten). Zo migreer je handmatig:
+
+1. Maak een lege repo aan op https://github.com/new → `pokemon-card-bulk-scanner`
+2. Voer uit: `./scripts/migrate-to-new-github.sh JOUW-USERNAME/pokemon-card-bulk-scanner`
+3. Importeer de nieuwe repo in [Vercel](https://vercel.com/new) en voeg de env vars toe
+
+Of hernoem de huidige repo in GitHub Settings → General → Repository name.
 
 ## API
 
