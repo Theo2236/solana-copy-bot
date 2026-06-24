@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Solana Copy Bot",
-  description: "24/7 Solana meme coin copy-trading monitor op Vercel",
+  title: "Pokémon Kaart Bulk Scanner",
+  description:
+    "AI bulk scanner voor Pokémon TCG kaarten — upload één foto, herken alle kaarten en bekijk marktprijzen.",
 };
 
 export default function RootLayout({
@@ -27,7 +28,7 @@ export default function RootLayout({
       lang="nl"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-slate-950">{children}</body>
+      <body className="min-h-full bg-slate-950 text-white">{children}</body>
     </html>
   );
 }

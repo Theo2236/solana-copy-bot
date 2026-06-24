@@ -1,210 +1,62 @@
-export type TradeSide = "buy" | "sell";
+export type CardCondition =
+  | "mint"
+  | "near_mint"
+  | "lightly_played"
+  | "moderately_played"
+  | "heavily_played"
+  | "damaged"
+  | "unknown";
 
-export type TradeStatus =
-  | "pending"
-  | "executed"
-  | "skipped"
-  | "failed"
-  | "closed";
+export type DetectedCard = {
+  index: number;
+  name: string;
+  setName?: string;
+  cardNumber?: string;
+  rarity?: string;
+  condition: CardCondition;
+  confidence: number;
+  notes?: string;
+};
 
-export interface TargetWallet {
-  address: string;
-  label: string;
-  pnl30dSol: number;
-  winRate: number;
-  enabled: boolean;
-}
+export type CardPrice = {
+  variant: string;
+  low?: number;
+  mid?: number;
+  high?: number;
+  market?: number;
+  directLow?: number;
+};
 
-export type CopySizeMode = "fixed" | "conviction";
+export type MatchedCard = {
+  detected: DetectedCard;
+  matchStatus: "matched" | "partial" | "not_found";
+  card?: {
+    id: string;
+    name: string;
+    set: string;
+    number: string;
+    rarity: string;
+    imageUrl?: string;
+    tcgplayerUrl?: string;
+    prices: CardPrice[];
+  };
+  searchQuery: string;
+  error?: string;
+};
 
-export interface BotConfig {
-  tradeSizeSol: number;
-  copySizeMode: CopySizeMode;
-  /** Bij conviction: tradeSizeSol hoort bij deze % wallet-inzet van de target (bv. 0.1 = 10%). */
-  referenceConvictionPct: number;
-  minCopyTradeSol: number;
-  maxCopyTradeSol: number;
-  maxOpenPositions: number;
-  stopLossPct: number;
-  takeProfitPct: number;
-  minLiquidityUsd: number;
-  minTokenAgeHours: number;
-  slippageBps: number;
-  /** Max price impact (%) op Jupiter-buy; 0 = uit. Pump.fun bonding curve is uitgezonderd. */
-  maxBuyPriceImpactPct: number;
-  /** Min. gesloten copy-trades voordat auto-disable wordt overwogen (0 = uit). */
-  targetAutoDisableMinTrades: number;
-  /** Targets met PnL onder deze drempel (SOL) worden uitgeschakeld. */
-  targetAutoDisableMaxLossSol: number;
-  /** Min. % wallet-inzet van target om buy te kopiëren (0 = uit). */
-  minTargetConvictionPct: number;
-  /** Gelaagde winst-exits (homerun); verlies-exit alleen via target copy-sell. */
-  homerunTiersEnabled: boolean;
-  homerunTier1PnlPct: number;
-  homerunTier1SellFraction: number;
-  homerunTier2PnlPct: number;
-  /** Fractie van oorspronkelijke positie bij tier 2 (niet van restant). */
-  homerunTier2SellOriginalFraction: number;
-  /** Trailing stop op moon bag na tier 1 (0 = uit). */
-  homerunTrailingStopPct: number;
-  targets: TargetWallet[];
-}
+export type ScanSummary = {
+  totalDetected: number;
+  matched: number;
+  partial: number;
+  notFound: number;
+  totalMarketValue: number;
+  currency: "USD";
+};
 
-export interface Position {
+export type ScanResponse = {
   id: string;
-  mint: string;
-  symbol?: string;
-  /** Totaal geïnvesteerde SOL in de (nog open) positie — som van alle buys minus verkochte porties. */
-  entrySol: number;
-  /** Gewogen gemiddelde entryprijs (SOL per token base-unit). */
-  entryPrice?: number;
-  /** Resterende token-hoeveelheid (raw base units) na eventuele gedeeltelijke verkopen. */
-  quantity?: string;
-  openedAt: string;
-  sourceWallet: string;
-  sourceTx: string;
-  status: "open" | "closed";
-  exitSol?: number;
-  pnlSol?: number;
-  closedAt?: string;
-  closeReason?: "take_profit" | "stop_loss" | "copy_sell" | "manual";
-  /** Aantal keer bijgekocht (averaging-in). Start op 1. */
-  buyCount?: number;
-  /** Aantal gedeeltelijke verkopen. */
-  sellCount?: number;
-  /** Gerealiseerde PnL uit gedeeltelijke verkopen vóór volledige sluiting. */
-  realizedPnlSol?: number;
-  lastBuyAt?: string;
-  lastSellAt?: string;
-  /** Homerun tier 1 (+100%): 50% verkocht, inleg terug. */
-  homerunTier1Done?: boolean;
-  /** Homerun tier 2 (+400%): extra winst vastgezet. */
-  homerunTier2Done?: boolean;
-  /** Hoogste gemeten PnL% voor trailing stop op moon bag. */
-  peakPnlPct?: number;
-}
-
-export interface TradeEvent {
-  id: string;
-  timestamp: string;
-  type:
-    | "webhook_received"
-    | "copy_buy"
-    | "copy_sell"
-    | "skip"
-    | "error"
-    | "cron_poll"
-    | "position_close";
-  wallet?: string;
-  mint?: string;
-  message: string;
-  txSignature?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface BotStats {
-  balanceSol: number;
-  openPositions: number;
-  totalTrades: number;
-  wins: number;
-  losses: number;
-  realizedPnlSol: number;
-  tradesToday: number;
-  lastEventAt?: string;
-  botEnabled: boolean;
-  mode: "live" | "dry_run";
-  uptimeSince?: string;
-  solPriceEur?: number | null;
-}
-
-export type DashboardConfig = Omit<BotConfig, "targets">;
-
-/** Afgeleide statistieken, berekend uit bestaande posities + events. */
-export interface DerivedStats {
-  winRate: number | null;
-  closedTrades: number;
-  avgPnlSol: number | null;
-  bestTradeSol: number | null;
-  worstTradeSol: number | null;
-  pnlTodaySol: number;
-  pnlWeekSol: number;
-  openExposureSol: number;
-  exposurePct: number | null;
-  skipCount24h: number;
-  errorCount24h: number;
-  copyCount24h: number;
-}
-
-/** Aggregatie van bot-kopieën per bron-wallet. */
-export interface TargetPerformance {
-  address: string;
-  label: string;
-  trades: number;
-  wins: number;
-  losses: number;
-  openTrades: number;
-  realizedPnlSol: number;
-  lastActivityAt?: string;
-}
-
-/** Eén dag in de PnL-tijdlijn (gesloten posities). */
-export interface PnlPoint {
-  date: string;
-  pnlSol: number;
-  trades: number;
-}
-
-/** Live mark-to-market voor een open positie (via sell-quote). */
-export interface OpenPositionMark {
-  positionId: string;
-  mint: string;
-  currentValueSol: number | null;
-  pnlSol: number | null;
-  pnlPct: number | null;
-  quoteSource?: "jupiter" | "pump_bonding_curve";
-  updatedAt?: string;
-}
-
-export interface HealthStatus {
-  redisConfigured: boolean;
-  heliusConfigured: boolean;
-  botWalletConfigured: boolean;
-  webhookSecretConfigured: boolean;
-  cronSecretConfigured: boolean;
-  dashboardPasswordConfigured: boolean;
-  authWarnings: string[];
-  mode: "live" | "dry_run";
-  lastEventAt?: string;
-  minutesSinceLastEvent: number | null;
-  silenceWarning: boolean;
-}
-
-export interface DashboardData {
-  stats: BotStats;
-  positions: Position[];
-  openPositionMarks: OpenPositionMark[];
-  recentEvents: TradeEvent[];
-  targets: TargetWallet[];
-  config: DashboardConfig;
-  derivedStats: DerivedStats;
-  targetPerformance: TargetPerformance[];
-  pnlTimeline: PnlPoint[];
-  health: HealthStatus;
-  botWallet?: string | null;
-}
-
-export interface ParsedSwap {
-  wallet: string;
-  side: TradeSide;
-  mint: string;
-  /** Bedrag in SOL waarmee de target handelde (0 als met stablecoin gefund). */
-  solAmount: number;
-  /** Bedrag in USD als de trade met een stablecoin (USDC/USDT) is gefund. */
-  usdAmount?: number;
-  /** Funding-valuta van de target-trade. */
-  quote?: "SOL" | "USD";
-  /** Hoeveelheid van de memecoin die de target verhandelde (decimaal-gecorrigeerd, absoluut). */
-  tokenAmount?: number;
-  signature: string;
-  timestamp: number;
-}
+  scannedAt: string;
+  provider: "gemini" | "openai";
+  cards: MatchedCard[];
+  summary: ScanSummary;
+};
