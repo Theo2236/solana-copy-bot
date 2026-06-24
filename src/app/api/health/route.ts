@@ -1,21 +1,13 @@
-import { withApiHandler } from "@/lib/api-handler";
-import { getBotPublicKey } from "@/lib/solana";
-
-export const runtime = "nodejs";
+import { NextResponse } from "next/server";
+import { getConfig } from "@/lib/config";
 
 export async function GET() {
-  return withApiHandler(async () => {
-    return Response.json({
-      ok: true,
-      service: "solana-copy-bot",
-      mode: process.env.BOT_MODE === "live" ? "live" : "dry_run",
-      botWalletConfigured: Boolean(getBotPublicKey()),
-      redisConfigured: Boolean(
-        process.env.UPSTASH_REDIS_REST_URL &&
-          process.env.UPSTASH_REDIS_REST_TOKEN,
-      ),
-      heliusConfigured: Boolean(process.env.HELIUS_API_KEY),
-      timestamp: new Date().toISOString(),
-    });
+  const config = getConfig();
+
+  return NextResponse.json({
+    status: "ok",
+    visionProvider: config.preferredVisionProvider,
+    pokemonApiConfigured: Boolean(config.pokemonKey),
+    maxCardsPerScan: config.maxCards,
   });
 }

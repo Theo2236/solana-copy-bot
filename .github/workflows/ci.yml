@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, chore/quality-baseline]
+    branches: [master, "cursor/**"]
   pull_request:
-    branches: [master]
+    branches: [master, "cursor/**"]
 
 jobs:
   quality:
